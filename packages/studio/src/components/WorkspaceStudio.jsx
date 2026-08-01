@@ -84,6 +84,10 @@ const MODE_GROUPS = ["Video", "Image", "Audio"];
 
 // Attachment slots the user can add to the bar on top of the mode's own —
 // "first frame / last frame / reference images" — each opens an upload frame.
+// Renders run server-side, so the browser is no longer the bottleneck; this
+// only keeps a single user from flooding the gateway's 8/min submit window.
+const MAX_CONCURRENT = 4;
+
 const SOURCE_DEFS = {
   start: { chip: "First frame", desc: "The shot starts on this image" },
   end: { chip: "Last frame", desc: "The shot aims to end composed like this — matched by AI description, approximate (no model on this gateway takes a literal end frame yet)" },
@@ -93,10 +97,28 @@ const SOURCE_DEFS = {
 
 function addableSources(mode) {
   if (!mode.live) return [];
-  if (mode.group === "Video") return ["start", "end", "ref"];
+  if (mode.group === "Video") return ["start", "end", "ref", "music", "script"];
   if (mode.group === "Image") return ["ref", "ref2"];
   return [];
 }
+
+// Text add-ons that shape the SOUNDTRACK rather than the picture. They fold
+// into the prompt; models with audio render them, silent models can't (the
+// composer warns before spending).
+const AUDIO_ADDONS = {
+  music: {
+    chip: "Music",
+    desc: "Background music to score the clip",
+    placeholder: "e.g. warm lo-fi piano, slow build, hopeful",
+    render: (value) => `Background music: ${value}.`,
+  },
+  script: {
+    chip: "Voiceover",
+    desc: "Words spoken aloud in the clip",
+    placeholder: "e.g. Every Lunar New Year, we come home.",
+    render: (value) => `Spoken voiceover, clearly audible: "${value}"`,
+  },
+};
 
 function loadTasks() {
   try {
@@ -159,6 +181,9 @@ export default function WorkspaceStudio({ apiKey }) {
   const [refImage2, setRefImage2] = useState(null);
   const [added, setAdded] = useState([]); // user-added source keys beyond the mode's own
   const [preset, setPreset] = useState("dolly-in");
+  const [music, setMusic] = useState("");
+  const [script, setScript] = useState("");
+  const [previewTask, setPreviewTask] = useState(null);
   const [videoModel, setVideoModel] = useState("");
   const [duration, setDuration] = useState(5);
   const [aspect, setAspect] = useState("16:9");
@@ -174,8 +199,14 @@ export default function WorkspaceStudio({ apiKey }) {
   // Chips on the bar = the mode's own sources + whatever the user added.
   const activeSources = [...mode.sources, ...added.filter((key) => !mode.sources.includes(key))];
   const addable = addableSources(mode).filter((key) => !activeSources.includes(key));
-  const sourceValues = { start: startFrame, end: endFrame, ref: refImage, ref2: refImage2 };
-  const sourceSetters = { start: setStartFrame, end: setEndFrame, ref: setRefImage, ref2: setRefImage2 };
+  const sourceValues = {
+    start: startFrame, end: endFrame, ref: refImage, ref2: refImage2,
+    music, script,
+  };
+  const sourceSetters = {
+    start: setStartFrame, end: setEndFrame, ref: setRefImage, ref2: setRefImage2,
+    music: setMusic, script: setScript,
+  };
 
   const switchMode = (nextId) => {
     setModeId(nextId);
@@ -188,6 +219,7 @@ export default function WorkspaceStudio({ apiKey }) {
     if (key === "ref") return mode.group === "Image" ? "Photo" : "Reference";
     if (key === "start") return isVideo ? "First frame" : "Start frame";
     if (key === "end") return "Last frame";
+    if (AUDIO_ADDONS[key]) return AUDIO_ADDONS[key].chip;
     return SOURCE_DEFS[key]?.chip || key;
   };
 
@@ -257,6 +289,13 @@ export default function WorkspaceStudio({ apiKey }) {
     }, 1500);
     return () => clearTimeout(pushTimer.current);
   }, [tasks]);
+
+  useEffect(() => {
+    if (!previewTask) return undefined;
+    const onKey = (event) => { if (event.key === "Escape") setPreviewTask(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewTask]);
 
   useEffect(() => {
     const loaded = loadTasks();
@@ -408,9 +447,11 @@ export default function WorkspaceStudio({ apiKey }) {
       if (key === "video" || sourceValues[key]) continue;
       const label = sourceChipLabel(key);
       notifyError(
-        mode.sources.includes(key)
-          ? `${mode.label} needs the ${label} image — click its chip to upload.`
-          : `Add the ${label} image, or remove its chip (✕).`,
+        AUDIO_ADDONS[key]
+          ? `Write the ${label} text, or remove its chip (✕).`
+          : mode.sources.includes(key)
+            ? `${mode.label} needs the ${label} image — click its chip to upload.`
+            : `Add the ${label} image, or remove its chip (✕).`,
       );
       setOpenPopover(key);
       return;
@@ -419,8 +460,8 @@ export default function WorkspaceStudio({ apiKey }) {
       notifyError("Describe what to create first.");
       return;
     }
-    if (activeCount.current >= 2) {
-      notifyError("Two tasks are already rendering — wait for one to finish.");
+    if (activeCount.current >= MAX_CONCURRENT) {
+      notifyError(`${MAX_CONCURRENT} tasks are already rendering — wait for one to finish.`);
       return;
     }
     // Text-only video models (Seedance 1.5 on this gateway) can't take frames.
@@ -523,6 +564,55 @@ export default function WorkspaceStudio({ apiKey }) {
     const value = sourceValues[key];
     const setter = sourceSetters[key];
     const removable = !mode.sources.includes(key);
+    const addon = AUDIO_ADDONS[key];
+    if (addon) {
+      return (
+        <div className="relative flex items-center" key={key}>
+          <button
+            type="button"
+            onClick={() => setOpenPopover(openPopover === key ? null : key)}
+            className={promptControlClassName({
+              active: openPopover === key || Boolean(value),
+              compact: true,
+              className: "!rounded-r-none !border-r-0",
+            })}
+          >
+            {key === "music" ? "♪" : "🗣"} {label}
+          </button>
+          <button
+            type="button"
+            aria-label={`Remove ${label}`}
+            onClick={() => {
+              setter("");
+              setAdded((previous) => previous.filter((entry) => entry !== key));
+              if (openPopover === key) setOpenPopover(null);
+            }}
+            className={promptControlClassName({ compact: true, className: "!rounded-l-none !px-2 text-white/40 hover:!text-red-400/90" })}
+          >
+            ✕
+          </button>
+          {openPopover === key && (
+            <PromptPopover className="!min-w-[320px] !max-h-none">
+              <PromptPopoverHeader>{label}</PromptPopoverHeader>
+              <p className="mb-2 px-1 text-[10px] leading-relaxed text-white/40">{addon.desc}</p>
+              {isVideo && capsModel && !capsModel.audio && (
+                <p className="mb-2 px-1 text-[10px] leading-relaxed text-amber-300/80">
+                  {capsModel.name} renders SILENT video — pick Seedance 1.5 or
+                  PixVerse (marked ♪) for a clip that actually has sound.
+                </p>
+              )}
+              <textarea
+                value={value}
+                onChange={(event) => setter(event.target.value)}
+                placeholder={addon.placeholder}
+                rows={3}
+                className="w-full resize-none rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/80 outline-none placeholder:text-white/25 focus:border-[rgba(212,249,57,0.4)]"
+              />
+            </PromptPopover>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="relative flex items-center" key={key}>
         <button
@@ -726,7 +816,7 @@ export default function WorkspaceStudio({ apiKey }) {
                           {addable.map((key) => (
                             <PromptMenuItem
                               key={key}
-                              description={SOURCE_DEFS[key]?.desc}
+                              description={(AUDIO_ADDONS[key] || SOURCE_DEFS[key])?.desc}
                               onClick={() => {
                                 setAdded((previous) => [...previous, key]);
                                 setOpenPopover(key); // straight into its upload frame
@@ -793,6 +883,14 @@ export default function WorkspaceStudio({ apiKey }) {
                           <PromptMenuList>
                             {capsVideo.map((entry) => {
                               const textOnly = entry.image === false;
+                              const facts = [
+                                `${entry.durations.join("s / ")}s${entry.fixed ? " fixed" : ""}`,
+                                entry.price,
+                                entry.shape,
+                                entry.audio === true ? "♪ sound" : entry.audio === false ? "silent" : null,
+                                entry.frames === "literal" ? "exact frame" : frameMode ? "frame guides only" : null,
+                                textOnly ? "text-only" : null,
+                              ].filter(Boolean);
                               return (
                                 <PromptMenuItem key={entry.id} selected={entry.id === capsModel?.id}
                                   id={entry.id === capsModel?.id ? "ws-model-selected" : undefined}
@@ -915,7 +1013,7 @@ export default function WorkspaceStudio({ apiKey }) {
               tasks.map((task) => (
                 <article
                   key={task.id}
-                  onClick={() => restoreTask(task)}
+                  onClick={() => (task.status === "done" && task.url ? setPreviewTask(task) : restoreTask(task))}
                   title="Click to load this task's settings"
                   className={`cursor-pointer overflow-hidden rounded-xl border transition-colors ${
                     restoredFrom === task.id ? "border-[rgba(212,249,57,0.4)]" : "border-white/[0.07] hover:border-white/20"
@@ -985,6 +1083,84 @@ export default function WorkspaceStudio({ apiKey }) {
           </div>
         )}
       </div>
+
+      {previewTask && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
+          onClick={() => setPreviewTask(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Result preview"
+        >
+          <div
+            className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#0b0b0d] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/8 px-4 py-2.5">
+              <span className="font-slate text-[10px] uppercase tracking-wider text-[#d4f939]">
+                {previewTask.mode}{previewTask.preset ? ` · ${previewTask.preset}` : ""}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewTask(null)}
+                aria-label="Close preview"
+                className="rounded-lg border border-white/10 px-2 py-1 text-xs text-white/50 transition-colors hover:border-white/30 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 items-center justify-center bg-black">
+              {previewTask.type === "video" ? (
+                <video
+                  src={previewTask.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-h-[65vh] w-auto max-w-full"
+                />
+              ) : (
+                <img src={previewTask.url} alt={previewTask.prompt} className="max-h-[65vh] w-auto max-w-full" />
+              )}
+            </div>
+
+            <div className="shrink-0 space-y-2 border-t border-white/8 px-4 py-3">
+              <p className="text-xs leading-relaxed text-white/70">{previewTask.prompt || "(no prompt)"}</p>
+              <p className="font-slate text-[10px] uppercase tracking-wider text-white/35">
+                {[previewTask.model, previewTask.settings?.duration ? `${previewTask.settings.duration}s` : null,
+                  previewTask.settings?.aspect].filter(Boolean).join(" · ")}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <a
+                  href={previewTask.url}
+                  download={`openvid-${previewTask.id}.${previewTask.type === "video" ? "mp4" : "jpg"}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-white/12 px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-white/70 transition-colors hover:border-white/30 hover:text-white"
+                >
+                  Download
+                </a>
+                <button
+                  type="button"
+                  onClick={() => { restoreTask(previewTask); setPreviewTask(null); }}
+                  className="rounded-lg border border-[rgba(212,249,57,0.35)] bg-[rgba(212,249,57,0.08)] px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-[#d4f939] transition-colors hover:bg-[rgba(212,249,57,0.16)]"
+                >
+                  Reuse settings
+                </button>
+                {previewTask.type === "image" && (
+                  <button
+                    type="button"
+                    onClick={() => { useAsStartFrame(previewTask.url); setPreviewTask(null); }}
+                    className="rounded-lg border border-white/12 px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-white/70 transition-colors hover:border-white/30 hover:text-white"
+                  >
+                    → Animate
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

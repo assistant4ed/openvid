@@ -25,40 +25,96 @@ const requestCounts = new Map();
 // The prompt templates — one per generation mode. Each tells the agent what
 // a complete prompt for that mode must specify.
 const MODE_TEMPLATES = {
-    t2i: `Text-to-image. Expand into ONE production prompt covering: main subject
-with concrete visual details, setting, lighting (source/mood/time of day),
-camera framing and lens feel, art direction or style, and quality descriptors.
-Max 110 words. Never invent text/watermarks.`,
+    t2i: `Text-to-image. Expand the request into ONE production prompt.
+Write RICH, SPECIFIC production detail — target 200-260 words. Thin
+prompts are the #1 cause of generic output, so spend words on: exact subject
+appearance (age, build, hair, wardrobe with colors and fabrics), the setting's
+concrete props and depth layers (foreground / midground / background), the
+light (key direction, quality, color temperature, practicals, shadows), the
+palette, lens and framing (focal feel, height, distance), and the finish
+(film stock / grade / grain / clarity). Never invent on-screen text, logos or
+watermarks. Do not use section headers or lists — one flowing paragraph.`,
     i2i: `Image editing with a reference photo the model will see. Restate the
 user's request as ONE precise edit instruction: name exactly WHAT changes
 (objects, colors, clothing, background) and command that everything else —
 faces, pose, composition, lighting, style — stays IDENTICAL to the reference.
-Max 80 words.`,
-    t2v: `Text-to-video. Expand into ONE cinematic shot description: subject and
-its action/motion, setting, camera movement (dolly/pan/track/static), pacing,
-lighting and atmosphere, lens/style feel. Present tense, max 100 words, single
-continuous shot, no cuts.`,
+Be specific about the new element's material, color, scale and placement, and
+how it should be lit to match the existing scene. Max 120 words.`,
+    t2v: `Text-to-video. Expand the request into ONE continuous cinematic shot.
+Write RICH, SPECIFIC production detail — target 200-260 words. Thin
+prompts are the #1 cause of generic output, so spend words on: exact subject
+appearance (age, build, hair, wardrobe with colors and fabrics), the setting's
+concrete props and depth layers (foreground / midground / background), the
+light (key direction, quality, color temperature, practicals, shadows), the
+palette, lens and framing (focal feel, height, distance), and the finish
+(film stock / grade / grain / clarity). Never invent on-screen text, logos or
+watermarks. Do not use section headers or lists — one flowing paragraph.
+Then choreograph TIME across the clip: what moves first, what
+follows, how the camera travels and at what speed, and how the shot resolves —
+so the whole duration is directed, not a single frozen idea. If the request
+asks for music or a spoken voiceover, state it plainly as part of the scene's
+audio.
+Present tense, single continuous shot, no cuts.`,
     i2v: `Image-to-video with a start frame the model will animate. Describe ONE
-continuous motion: what in the frame moves and how, camera behaviour, pacing,
-atmosphere. Command that subjects, style and lighting stay true to the start
-frame. Present tense, max 90 words, no cuts.`,
+continuous motion applied to that frame.
+Write RICH, SPECIFIC production detail — target 200-260 words. Thin
+prompts are the #1 cause of generic output, so spend words on: exact subject
+appearance (age, build, hair, wardrobe with colors and fabrics), the setting's
+concrete props and depth layers (foreground / midground / background), the
+light (key direction, quality, color temperature, practicals, shadows), the
+palette, lens and framing (focal feel, height, distance), and the finish
+(film stock / grade / grain / clarity). Never invent on-screen text, logos or
+watermarks. Do not use section headers or lists — one flowing paragraph.
+Then choreograph TIME across the clip: what moves first, what
+follows, how the camera travels and at what speed, and how the shot resolves —
+so the whole duration is directed, not a single frozen idea. If the request
+asks for music or a spoken voiceover, state it plainly as part of the scene's
+audio.
+Command that subjects, wardrobe, style and lighting stay TRUE to the start
+frame — you are adding motion, not redesigning the scene. Present tense,
+single continuous shot, no cuts.`,
     'i2v-vision': `You are LOOKING at the user's reference frames. The video model
 cannot see them, so your prompt must RECONSTRUCT the scene from what you see:
 name the exact subjects, their colors, clothing/materials, layout and
-composition, background, lighting — precisely, no inventions. Then describe
-the user's requested motion applied to THAT scene, with camera behaviour and
-pacing. If an END FRAME is provided, the shot must conclude composed exactly
-like it — describe the transition from start to end. If STYLE/SUBJECT
-REFERENCES are provided, carry their look into the scene. Present tense,
-max 150 words, single continuous shot, no cuts.`,
+composition, background, lighting — precisely, no inventions.
+Write RICH, SPECIFIC production detail — target 200-260 words. Thin
+prompts are the #1 cause of generic output, so spend words on: exact subject
+appearance (age, build, hair, wardrobe with colors and fabrics), the setting's
+concrete props and depth layers (foreground / midground / background), the
+light (key direction, quality, color temperature, practicals, shadows), the
+palette, lens and framing (focal feel, height, distance), and the finish
+(film stock / grade / grain / clarity). Never invent on-screen text, logos or
+watermarks. Do not use section headers or lists — one flowing paragraph.
+Then choreograph TIME across the clip: what moves first, what
+follows, how the camera travels and at what speed, and how the shot resolves —
+so the whole duration is directed, not a single frozen idea. If the request
+asks for music or a spoken voiceover, state it plainly as part of the scene's
+audio.
+If an END FRAME is provided, the shot must conclude composed exactly like it —
+describe the transition from start to end. If STYLE/SUBJECT REFERENCES are
+provided, carry their look into the scene. Present tense, single continuous
+shot, no cuts.`,
     'i2v-compose': `You are given exact visual descriptions of the user's
 reference frames — a vision model wrote them from the real images. The video
 model sees neither the images nor these notes: RECONSTRUCT the start-frame
 scene precisely from its description (subjects, colors, materials, layout,
-lighting — no inventions), apply the user's requested motion to that scene,
-and if an END FRAME description exists the shot must conclude composed like
-it. Carry any STYLE/SUBJECT REFERENCE looks into the scene. Present tense,
-max 150 words, single continuous shot, no cuts.`,
+lighting — no inventions), then apply the requested motion to that scene.
+Write RICH, SPECIFIC production detail — target 200-260 words. Thin
+prompts are the #1 cause of generic output, so spend words on: exact subject
+appearance (age, build, hair, wardrobe with colors and fabrics), the setting's
+concrete props and depth layers (foreground / midground / background), the
+light (key direction, quality, color temperature, practicals, shadows), the
+palette, lens and framing (focal feel, height, distance), and the finish
+(film stock / grade / grain / clarity). Never invent on-screen text, logos or
+watermarks. Do not use section headers or lists — one flowing paragraph.
+Then choreograph TIME across the clip: what moves first, what
+follows, how the camera travels and at what speed, and how the shot resolves —
+so the whole duration is directed, not a single frozen idea. If the request
+asks for music or a spoken voiceover, state it plainly as part of the scene's
+audio.
+If an END FRAME description exists the shot must conclude composed like it.
+Carry any STYLE/SUBJECT REFERENCE looks into the scene. Present tense, single
+continuous shot, no cuts.`,
 };
 
 const DESCRIBE_SYSTEM =
@@ -201,7 +257,7 @@ export async function POST(request) {
             },
             body: JSON.stringify({
                 model,
-                max_tokens: 2000,
+                max_tokens: 3000,
                 temperature: 0.5,
                 messages: [
                     { role: 'system', content: systemText },
