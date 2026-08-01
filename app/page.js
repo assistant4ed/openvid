@@ -97,6 +97,44 @@ const STEPS = [
 ];
 
 // Real generated clips — rendered by the studio's own video pipeline.
+const HOW_IT_WORKS = [
+  {
+    tag: 'Uses your frame',
+    title: 'Some models start on your actual photo',
+    body: 'Upload a frame and Seedance 1.5 or Vidu renders from those exact pixels — the first frame of the clip IS your image. The studio switches to one of these automatically the moment you attach a frame.',
+    gif: '/showcase/gifs/explain-frame-exact.gif',
+    alt: 'The uploaded photo beside a render that begins on the identical frame',
+  },
+  {
+    tag: 'Guides style only',
+    title: 'Others only read a description of it',
+    body: 'Kling and Omni never see your pixels — the studio describes your image to them in words, so you get the mood and subject back, not the same building. We label these instead of pretending.',
+    gif: '/showcase/gifs/explain-frame-guided.gif',
+    alt: 'The same photo beside a Kling render showing a different diner',
+  },
+  {
+    tag: 'Shape is per model',
+    title: 'Portrait or landscape is the model, not a setting',
+    body: 'PixVerse renders 9:16 portrait with sound; Kling renders 16:9. Pick the model that matches where the video is going — the picker shows each one&apos;s real output shape.',
+    gif: '/showcase/gifs/explain-shapes.gif',
+    alt: 'A portrait PixVerse clip beside a landscape Kling clip',
+  },
+  {
+    tag: 'Text to video',
+    title: 'Or write nothing but a sentence',
+    body: 'The Prompt Agent expands a one-line idea into a full 200-word shot brief — subject, set, light, lens, and how the motion resolves — then renders it. This clip came from one sentence.',
+    gif: '/showcase/gifs/explain-t2v.gif',
+    alt: 'A paper boat drifting downstream, generated from a single sentence',
+  },
+  {
+    tag: 'Camera moves',
+    title: 'Direct the camera, keep the scene',
+    body: 'Pick a move — dolly in, orbit, crash zoom — and it is applied to your frame instead of a new invention. Rendered here on a frame-exact model, so the push-in starts on the real photo.',
+    gif: '/showcase/gifs/explain-camera.gif',
+    alt: 'A slow push-in toward a neon diner',
+  },
+];
+
 const SCENE_CLIPS = {
   '01': '/showcase/clips/neon-alley.mp4',
   '02': '/showcase/clips/glacier-reveal.mp4',
@@ -161,6 +199,9 @@ export default function Home() {
             <Link href="/showcase" className="slate-label transition-colors hover:text-white">
               Showcase
             </Link>
+            <a href="#how-it-works" className="slate-label transition-colors hover:text-white">
+              How it works
+            </a>
             <a href="#models" className="slate-label transition-colors hover:text-white">
               Models
             </a>
@@ -332,6 +373,38 @@ export default function Home() {
         </section>
 
         {/* ── Model wall — marquee ── */}
+
+        {/* How generation actually works — each panel is a REAL render from
+            our own model QA, not a mockup. */}
+        <section id="how-it-works" className="letterbox-rule mx-auto max-w-7xl px-6 py-24">
+          <span className="slate-label text-white/40">How it actually works</span>
+          <h2 className="display-2 mt-3 max-w-3xl text-white">
+            Every model behaves differently. The studio tells you which, before you spend.
+          </h2>
+          <p className="mt-4 max-w-2xl text-white/50">
+            These panels are real output from our own model tests — the same clips the
+            picker&apos;s labels are derived from.
+          </p>
+
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
+            {HOW_IT_WORKS.map((item) => (
+              <figure key={item.title} className="panel overflow-hidden">
+                <img
+                  src={item.gif}
+                  alt={item.alt}
+                  loading="lazy"
+                  className="w-full border-b border-white/8 bg-black object-contain"
+                />
+                <figcaption className="px-5 py-4">
+                  <span className="slate-label text-[#d4f939]">{item.tag}</span>
+                  <h3 className="mt-2 text-lg font-bold text-white">{item.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-white/55">{item.body}</p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+
         <section id="models" className="letterbox-rule py-24">
           <div className="mx-auto max-w-7xl px-6">
             <SlateDivider label="THE VAULT — 403 MODELS, ONE BAR" />
