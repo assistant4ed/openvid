@@ -278,62 +278,19 @@ function durationForModel(modelId, requested) {
 }
 
 async function generateVideoViaSuperb(params) {
-    // Multi-key routing: highest-ranked key that supports the chosen model.
-    const superbKey =
-        typeof window !== 'undefined' ? keyForVideoModel(params.videoModel) : null;
-    if (!superbKey) throw new Error('Sign in with your SuperbAPI key to generate.');
-
-    const rawFrame = params.image_url || params.images_list?.[0];
-    const hostedFrame = await hostedFrameUrl(rawFrame);
-    // The render upstream currently DROPS image inputs on this route (verified
-    // with a marker frame). The vision pass below reads the actual frames and
-    // reconstructs the scene inside the prompt, so the output follows the
-    // user's pictures even though the upstream never sees the pixels. The
-    // hosted frame is still sent — the day the provider honors it, fidelity
-    // upgrades automatically.
-    const asVision = (source, role) =>
-        typeof source === 'string' && source.startsWith('data:image/') ? { role, data: source } : null;
-    const visionImages = [
-        asVision(rawFrame, 'start'),
-        asVision(params.end_image, 'end'),
-        ...(Array.isArray(params.style_refs) ? params.style_refs : [])
-            .map((ref) => asVision(ref, 'ref')),
-    ].filter(Boolean);
-    const enhancedVideo = await enhancePrompt(
-        superbKey,
-        params.prompt || 'bring this scene to life with natural motion',
-        hostedFrame || visionImages.length > 0 ? 'i2v' : 't2v',
-        visionImages,
-    );
-    if (visionImages.length > 0 && !enhancedVideo.visionUsed) {
-        notifyInfo(
-            'The vision model could not read your image(s) this run — rendering from your text only, so the result may not match them.',
-        );
-    }
-
-    const submit = await fetchWithRollRetry('/api/superb-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
-        body: JSON.stringify({
-            model: params.videoModel || undefined,
-            prompt: enhancedVideo.prompt,
-            // Duration shape comes from the probed capabilities: snapped to
-            // the model's allowed values, OMITTED for fixed-length models
-            // (they reject the param), legacy Kling clamp when unknown.
-            duration: durationForModel(params.videoModel, params.duration),
-            aspect_ratio: params.aspect_ratio,
-            image_url: hostedFrame,
-        }),
+    // Every studio's video path rides the server-side job pipeline now — the
+    // spec is safe in the database before this promise resolves, so reloads
+    // and dropped connections can no longer kill a render. The legacy
+    // onTaskId/onRequestId callbacks receive the JOB id; pollSuperbVideoTask
+    // recognizes job_ ids, so persisted resumes keep working everywhere.
+    return submitVideoJob({
+        ...params,
+        onJobId: (jobId) => {
+            if (params.onJobId) params.onJobId(jobId);
+            if (params.onRequestId) params.onRequestId(jobId);
+            if (params.onTaskId) params.onTaskId(jobId);
+        },
     });
-    if (!submit.ok) {
-        const detail = await submit.json().catch(() => ({}));
-        throw new Error(detail?.error || `Video submit failed (${submit.status})`);
-    }
-    const { taskId } = await submit.json();
-    if (params.onRequestId) params.onRequestId(taskId);
-    if (params.onTaskId) params.onTaskId(taskId);
-
-    return pollSuperbVideoTask(taskId, superbKey);
 }
 
 // ── Server-side render jobs ─────────────────────────────────────────────────
@@ -375,6 +332,50 @@ export async function submitVideoJob(params) {
     return pollRenderJob(jobId, superbKey);
 }
 
+// Image generation through the same pipeline: refs are hosted, the server
+// grounds (t2i/i2i), renders via the gateway image route, and parks the
+// result on the durable asset host. Returns { url } like the video path.
+export async function submitImageJob(params) {
+    const superbKey =
+        typeof window !== 'undefined' ? window.localStorage.getItem('superbapi_key') : null;
+    if (!superbKey) throw new Error('Sign in with your SuperbAPI key to generate.');
+
+    const refs = [params.image_url, ...(Array.isArray(params.images_list) ? params.images_list : [])]
+        .filter(Boolean);
+    const hosted = (await Promise.all(refs.map(hostedFrameUrl))).filter(Boolean);
+
+    const submit = await fetchWithRollRetry('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
+        body: JSON.stringify({
+            kind: 'image',
+            prompt: params.prompt,
+            ref_urls: hosted,
+        }),
+    });
+    if (!submit.ok) {
+        const detail = await submit.json().catch(() => ({}));
+        throw new Error(detail?.error || `Job submit failed (${submit.status})`);
+    }
+    const { jobId } = await submit.json();
+    if (params.onJobId) params.onJobId(jobId);
+    return pollRenderJob(jobId, superbKey);
+}
+
+// Retry a failed job — the server clones the stored spec, frames included.
+export async function retryRenderJob(jobId) {
+    const superbKey =
+        typeof window !== 'undefined' ? window.localStorage.getItem('superbapi_key') : null;
+    if (!superbKey) throw new Error('Sign in with your SuperbAPI key first.');
+    const response = await fetch(`/api/jobs/${jobId}/retry`, {
+        method: 'POST',
+        headers: { 'x-superb-key': superbKey },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || `Retry failed (${response.status})`);
+    return data.jobId;
+}
+
 const JOB_POLL_MS = 8000;
 const JOB_POLL_MAX = 160; // ~21 min ceiling
 
@@ -414,6 +415,11 @@ export async function pollRenderJob(jobId, superbKeyMaybe) {
  * only loses the POLLING, so any stored taskId can resume here at any time.
  */
 export async function pollSuperbVideoTask(taskId, superbKeyMaybe) {
+    // Job-pipeline ids are resumable through the jobs API — old persisted
+    // upstream task ids keep the direct polling below.
+    if (typeof taskId === 'string' && taskId.startsWith('job_')) {
+        return pollRenderJob(taskId, superbKeyMaybe);
+    }
     const superbKey =
         superbKeyMaybe ||
         (typeof window !== 'undefined' ? window.localStorage?.getItem('superbapi_key') : null);

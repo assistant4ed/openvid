@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { generateImage, pollRenderJob, pollSuperbVideoTask, submitVideoJob } from "../muapi.js";
+import {
+  pollRenderJob,
+  pollSuperbVideoTask,
+  retryRenderJob,
+  submitImageJob,
+  submitVideoJob,
+} from "../muapi.js";
 import { CAMERA_PATH_PRESETS } from "../utils/cameraPathPresets.js";
 import { notifyError, notifyInfo } from "../utils/notify.js";
 import {
@@ -80,7 +86,7 @@ const MODE_GROUPS = ["Video", "Image", "Audio"];
 // "first frame / last frame / reference images" — each opens an upload frame.
 const SOURCE_DEFS = {
   start: { chip: "First frame", desc: "The shot starts on this image" },
-  end: { chip: "Last frame", desc: "The shot ends composed like this" },
+  end: { chip: "Last frame", desc: "The shot aims to end composed like this — matched by AI description, approximate (no model on this gateway takes a literal end frame yet)" },
   ref: { chip: "Reference", desc: "Carry this look or subject into the result" },
   ref2: { chip: "Reference 2", desc: "A second reference image" },
 };
@@ -339,7 +345,23 @@ export default function WorkspaceStudio({ apiKey }) {
     });
   };
 
-  const restoreTask = (task) => {
+  // Re-run a failed job: the server clones its stored spec (frames included),
+  // so retry works even in a browser that never saw the original upload.
+  const retryTask = async (task) => {
+    try {
+      const jobId = await retryRenderJob(task.jobId);
+      updateTask(task.id, { status: "rendering", error: null, jobId });
+      const result = await pollRenderJob(jobId);
+      updateTask(task.id, { status: "done", url: result.url });
+    } catch (error) {
+      updateTask(task.id, {
+        status: "failed",
+        error: error?.message?.slice(0, 140) || "Retry failed",
+      });
+    }
+  };
+
+  const restoreTask = async (task) => {
     const settings = task.settings || {};
     if (settings.modeId && MODES.some((entry) => entry.id === settings.modeId)) switchMode(settings.modeId);
     setPrompt(task.prompt || "");
@@ -348,6 +370,26 @@ export default function WorkspaceStudio({ apiKey }) {
     if (settings.duration) setDuration(settings.duration);
     if (settings.aspect) setAspect(settings.aspect);
     setRestoredFrom(task.id);
+    // The server job still holds the uploaded frames as asset URLs — pull
+    // them back onto the chips so a reuse run really reuses the images.
+    if (task.jobId && apiKey) {
+      try {
+        const response = await fetch(`/api/jobs/${task.jobId}`, { headers: { "x-superb-key": apiKey } });
+        if (response.ok) {
+          const spec = (await response.json()).spec || {};
+          const extras = [];
+          if (spec.image_url) { setStartFrame(spec.image_url); extras.push("start"); }
+          if (spec.end_image_url) { setEndFrame(spec.end_image_url); extras.push("end"); }
+          if (Array.isArray(spec.ref_urls)) {
+            if (spec.ref_urls[0]) { setRefImage(spec.ref_urls[0]); extras.push("ref"); }
+            if (spec.ref_urls[1]) { setRefImage2(spec.ref_urls[1]); extras.push("ref2"); }
+          }
+          if (extras.length > 0) setAdded((previous) => [...new Set([...previous, ...extras])]);
+        }
+      } catch {
+        // frames unavailable (expired assets) — settings alone still restore
+      }
+    }
     notifyInfo("Task settings loaded — edit anything and generate again.");
   };
 
@@ -417,11 +459,14 @@ export default function WorkspaceStudio({ apiKey }) {
       const chipValue = (key) => (activeSources.includes(key) ? sourceValues[key] : null);
       const chipRefs = ["ref", "ref2"].map(chipValue).filter(Boolean);
       if (!isVideo) {
+        // Images ride the job pipeline too — grounding, render and storage
+        // all happen server-side, so a reload can't orphan them anymore.
         const templated = mode.prefix ? `${mode.prefix}${trimmed}` : trimmed;
-        result = await generateImage(apiKey, {
+        result = await submitImageJob({
           prompt: templated,
           ...(chipRefs.length === 1 ? { image_url: chipRefs[0] } : {}),
           ...(chipRefs.length > 1 ? { images_list: chipRefs } : {}),
+          onJobId: (jobId) => updateTask(id, { jobId }),
         });
       } else {
         const movePrefix = mode.camera && presetEntry
@@ -794,8 +839,16 @@ export default function WorkspaceStudio({ apiKey }) {
                         {aspect}
                       </button>
                       {openPopover === "aspect" && (
-                        <PromptPopover>
+                        <PromptPopover className="!min-w-[240px]">
                           <PromptPopoverHeader>Aspect ratio</PromptPopoverHeader>
+                          {/* Verified 2026-08-01: the render provider currently
+                              ignores this for every model — say so instead of
+                              silently under-delivering a portrait request. */}
+                          <p className="px-3 pb-2 text-[11px] leading-4 text-amber-300/80">
+                            Heads-up: the render provider currently picks the
+                            output size itself — this setting is a request, not
+                            a guarantee.
+                          </p>
                           <PromptMenuList>
                             {ASPECTS.map((value) => (
                               <PromptMenuItem key={value} selected={value === aspect}
@@ -871,7 +924,7 @@ export default function WorkspaceStudio({ apiKey }) {
                   <div className="relative flex aspect-video items-center justify-center bg-black/60">
                     {task.status === "done" && task.url ? (
                       task.type === "video" ? (
-                        <video src={task.url} controls muted playsInline className="h-full w-full object-cover" onClick={(e) => e.stopPropagation()} />
+                        <video src={task.url} controls muted playsInline className="h-full w-full bg-black object-contain" onClick={(e) => e.stopPropagation()} />
                       ) : (
                         <img src={task.url} alt={task.prompt} className="h-full w-full object-cover" />
                       )
@@ -909,6 +962,12 @@ export default function WorkspaceStudio({ apiKey }) {
                           Reuse
                         </button>
                       </>
+                    )}
+                    {task.status === "failed" && task.jobId && (
+                      <button type="button" onClick={() => retryTask(task)}
+                        className="rounded border border-[rgba(212,249,57,0.3)] bg-[rgba(212,249,57,0.07)] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-[#d4f939] transition-colors hover:bg-[rgba(212,249,57,0.14)]">
+                        Retry
+                      </button>
                     )}
                     <button type="button" onClick={() => deleteTask(task.id)}
                       className="ml-auto rounded border border-white/10 bg-white/[0.04] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-red-400/80 transition-colors hover:border-red-400/40">

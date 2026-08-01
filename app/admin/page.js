@@ -9,6 +9,7 @@ export default function AdminPage() {
     const [token, setToken] = useState('');
     const [draft, setDraft] = useState('');
     const [users, setUsers] = useState(null);
+    const [jobs, setJobs] = useState([]);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
@@ -26,6 +27,8 @@ export default function AdminPage() {
             if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
             setUsers(data.users);
             window.sessionStorage.setItem('ov_admin_token', activeToken);
+            const jobsResponse = await fetch('/api/admin/jobs', { headers: { 'x-admin-token': activeToken } });
+            if (jobsResponse.ok) setJobs((await jobsResponse.json()).jobs || []);
         } catch (err) {
             setUsers(null);
             setError(err.message);
@@ -133,6 +136,45 @@ export default function AdminPage() {
                             </tbody>
                         </table>
                     </div>
+                )}
+
+                {users && (
+                    <>
+                        <h2 className="text-lg font-bold text-white mt-10 mb-3">Recent render jobs</h2>
+                        <div className="border border-white/10 rounded-2xl overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead className="bg-white/5 text-white/40 text-left">
+                                    <tr>
+                                        <th className="px-3 py-2.5 font-medium">When</th>
+                                        <th className="px-3 py-2.5 font-medium">Who</th>
+                                        <th className="px-3 py-2.5 font-medium">Kind</th>
+                                        <th className="px-3 py-2.5 font-medium">Model</th>
+                                        <th className="px-3 py-2.5 font-medium">Prompt</th>
+                                        <th className="px-3 py-2.5 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {jobs.map((job) => (
+                                        <tr key={job.id} className="border-t border-white/5 align-top">
+                                            <td className="px-3 py-2 text-white/40 whitespace-nowrap">{String(job.createdAt).slice(5, 16).replace('T', ' ')}</td>
+                                            <td className="px-3 py-2 text-white/60">{job.who}</td>
+                                            <td className="px-3 py-2 text-white/40">{job.kind}</td>
+                                            <td className="px-3 py-2 text-white/60">{job.model || '—'}</td>
+                                            <td className="px-3 py-2 text-white/40 max-w-[260px] truncate" title={job.prompt || ''}>{job.prompt || '—'}</td>
+                                            <td className="px-3 py-2">
+                                                {job.status === 'done' && <span className="text-[#d4f939]">done</span>}
+                                                {job.status === 'failed' && <span className="text-red-400" title={job.error || ''}>failed</span>}
+                                                {!['done', 'failed'].includes(job.status) && <span className="text-amber-300">{job.status}</span>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {jobs.length === 0 && (
+                                        <tr><td colSpan={6} className="px-3 py-6 text-center text-white/30">No jobs yet.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
                 )}
             </div>
         </main>

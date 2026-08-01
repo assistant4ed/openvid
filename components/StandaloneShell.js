@@ -648,8 +648,11 @@ export default function StandaloneShell() {
   useEffect(() => {
     window.__studioNotifyMounted = true;
     const handleStudioNotify = (event) => {
+      // 'info' must NEVER masquerade as success — it used to render as
+      // "Generation complete · Your result is ready" for plain status notes,
+      // which told users a still-rendering task was done.
       pushNotification({
-        type: event.detail?.kind === 'info' ? 'success' : 'error',
+        type: event.detail?.kind === 'info' ? 'info' : 'error',
         tabId: activeTab,
         label: TABS.find((tab) => tab.id === activeTab)?.label || 'Studio',
         message: event.detail?.message || 'Something went wrong',
@@ -1151,7 +1154,9 @@ export default function StandaloneShell() {
                 className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
                   notif.type === 'success'
                     ? 'border-primary/40 bg-primary text-primary'
-                    : 'border-red-400/40 bg-red-50 text-red-600'
+                    : notif.type === 'info'
+                      ? 'border-zinc-300 bg-zinc-100 text-zinc-500'
+                      : 'border-red-400/40 bg-red-50 text-red-600'
                 }`}
               >
                 {notif.type === 'success' ? (
@@ -1171,11 +1176,16 @@ export default function StandaloneShell() {
                 <p className="font-semibold leading-5 text-zinc-900">
                   {notif.label}
                   <span className="font-normal text-zinc-500">
-                    {notif.type === 'success' ? ' - Generation complete' : ' - Generation failed'}
+                    {notif.type === 'success' ? ' - Generation complete' : notif.type === 'info' ? '' : ' - Generation failed'}
                   </span>
                 </p>
                 {notif.type === 'error' && notif.message && (
                   <p className="mt-0.5 line-clamp-2 text-[12px] font-medium leading-4 text-red-600" title={notif.message}>
+                    {notif.message}
+                  </p>
+                )}
+                {notif.type === 'info' && notif.message && (
+                  <p className="mt-0.5 line-clamp-2 text-[12px] leading-4 text-zinc-500" title={notif.message}>
                     {notif.message}
                   </p>
                 )}

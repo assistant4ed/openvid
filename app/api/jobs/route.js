@@ -38,15 +38,16 @@ export async function POST(request) {
     if (isRateLimited(apiKey)) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
 
     const body = await request.json().catch(() => null);
+    const kind = body?.kind === 'image' ? 'image' : 'video';
     const prompt = typeof body?.prompt === 'string' ? body.prompt.slice(0, MAX_PROMPT_CHARS).trim() : '';
     const model = typeof body?.model === 'string' ? body.model.slice(0, 80) : '';
-    if (!prompt || !model) {
-        return NextResponse.json({ error: 'prompt and model are required' }, { status: 400 });
+    if (!prompt || (kind === 'video' && !model)) {
+        return NextResponse.json({ error: 'prompt (and model for video) are required' }, { status: 400 });
     }
 
     const spec = {
         prompt,
-        model,
+        model: model || null,
         duration: Number(body.duration) > 0 ? Number(body.duration) : null,
         aspect_ratio: typeof body.aspect_ratio === 'string' ? body.aspect_ratio.slice(0, 10) : null,
         image_url: hostedUrl(body.image_url),
@@ -55,7 +56,7 @@ export async function POST(request) {
     };
 
     try {
-        const jobId = await createJob({ apiKey, userId: userIdFromRequest(request), spec });
+        const jobId = await createJob({ apiKey, userId: userIdFromRequest(request), spec, kind });
         return NextResponse.json({ jobId, status: 'queued' }, { status: 201 });
     } catch (error) {
         const status = error?.statusCode === 503 ? 503 : 500;
