@@ -50,6 +50,7 @@ export async function POST(request) {
         model: model || null,
         duration: Number(body.duration) > 0 ? Number(body.duration) : null,
         aspect_ratio: typeof body.aspect_ratio === 'string' ? body.aspect_ratio.slice(0, 10) : null,
+        resolution: typeof body.resolution === 'string' ? body.resolution.slice(0, 10) : null,
         image_url: hostedUrl(body.image_url),
         end_image_url: hostedUrl(body.end_image_url),
         ref_urls: Array.isArray(body.ref_urls) ? body.ref_urls.map(hostedUrl).filter(Boolean).slice(0, 2) : [],

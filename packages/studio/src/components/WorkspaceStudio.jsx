@@ -89,7 +89,7 @@ const MODE_GROUPS = ["Video", "Image", "Audio"];
 const MAX_CONCURRENT = 4;
 
 const SOURCE_DEFS = {
-  start: { chip: "First frame", desc: "The shot starts on this image" },
+  start: { chip: "First frame", desc: "The shot starts on this image (models marked \"uses your frame\" render the real pixels; others rebuild it from an AI description)" },
   end: { chip: "Last frame", desc: "The shot aims to end composed like this — matched by AI description, approximate (no model on this gateway takes a literal end frame yet)" },
   ref: { chip: "Reference", desc: "Carry this look or subject into the result" },
   ref2: { chip: "Reference 2", desc: "A second reference image" },
@@ -348,6 +348,17 @@ export default function WorkspaceStudio({ apiKey }) {
     if (capsModel && videoModel !== capsModel.id) setVideoModel(capsModel.id);
   }, [capsModel, videoModel]);
 
+  // A model whose provider is currently failing must not stay selected — the
+  // click would just burn the user's time (and sometimes their credit).
+  useEffect(() => {
+    if (!capsModel?.degraded) return;
+    const healthy = capsVideo.find((entry) => !entry.degraded);
+    if (healthy) {
+      setVideoModel(healthy.id);
+      notifyInfo(`${capsModel.name}'s provider is failing right now — switched to ${healthy.name}.`);
+    }
+  }, [capsModel, capsVideo]);
+
   // Keep the duration valid for the chosen model (Veo only renders 8s, Grok
   // 6s, Kling 5/10s…) — snap to the model's first allowed length on switch.
   useEffect(() => {
@@ -554,6 +565,13 @@ export default function WorkspaceStudio({ apiKey }) {
       activeCount.current -= 1;
     }
   };
+
+  const estimatedCost = (() => {
+    if (!isVideo || !capsModel?.cost) return null;
+    const seconds = capsModel.fixed ? (capsModel.durations?.[0] || duration) : duration;
+    const total = capsModel.perSecond ? capsModel.cost * seconds : capsModel.cost;
+    return `$${total.toFixed(2)}`;
+  })();
 
   const rendering = tasks.filter((task) => task.status === "rendering").length;
 
@@ -883,19 +901,26 @@ export default function WorkspaceStudio({ apiKey }) {
                           <PromptMenuList>
                             {capsVideo.map((entry) => {
                               const textOnly = entry.image === false;
+                              const blocksFrame = frameMode && (textOnly || entry.frames === "ignored");
+                              const blocked = blocksFrame || entry.degraded;
                               const facts = [
                                 `${entry.durations.join("s / ")}s${entry.fixed ? " fixed" : ""}`,
                                 entry.price,
                                 entry.shape,
                                 entry.audio === true ? "♪ sound" : entry.audio === false ? "silent" : null,
-                                entry.frames === "literal" ? "exact frame" : frameMode ? "frame guides only" : null,
+                                entry.degraded ? "provider down — recent renders failed" : null,
+                                entry.frames === "literal"
+                                  ? "uses your frame"
+                                  : entry.frames === "ignored"
+                                    ? "ignores frames"
+                                    : frameMode ? "frame guides style only" : null,
                                 textOnly ? "text-only" : null,
                               ].filter(Boolean);
                               return (
                                 <PromptMenuItem key={entry.id} selected={entry.id === capsModel?.id}
                                   id={entry.id === capsModel?.id ? "ws-model-selected" : undefined}
-                                  disabled={textOnly && frameMode}
-                                  className={textOnly && frameMode ? "opacity-40 !cursor-not-allowed" : ""}
+                                  disabled={blocked}
+                                  className={blocked ? "opacity-40 !cursor-not-allowed" : ""}
                                   description={`${entry.durations.join("s / ")}s${entry.fixed ? " fixed" : ""}${entry.price ? ` · ${entry.price}` : ""}${textOnly ? " · text-only" : ""}${entry.frameExact ? " · frame-exact" : ""}`}
                                   onClick={() => { setVideoModel(entry.id); setOpenPopover(null); }}>
                                   {entry.name}

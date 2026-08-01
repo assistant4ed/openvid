@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { ensureSchema, getPool } from '../../../lib/accounts';
+
 // Probes what a given SuperbAPI key can ACTUALLY run, so the studios only ever
 // offer models that will succeed.
 //
@@ -32,32 +34,32 @@ const VIDEO_CANDIDATES = [
     { id: 'kling-2.5', name: 'Kling 2.5', durations: [5, 10], resolution: '720p', cost: 1.0, shape: '16:9', audio: false, frames: 'described', price: '$1.00 / clip' },
     { id: 'kling-2.5-1080p', name: 'Kling 2.5 · 1080p', durations: [5, 10], resolution: '1080p', cost: 1.0, shape: '16:9', audio: false, frames: 'described', price: '$1.00 / clip' },
     { id: 'doubao-seedance-1-5-pro_480p', name: 'Seedance 1.5 Pro · 480p', frameExact: true, durations: [5, 10], resolution: '480p', cost: 0.32, shape: 'wide · varies', audio: true, frames: 'literal', price: '$0.32 / clip' },
-    { id: 'doubao-seedance-1-5-pro_720p', name: 'Seedance 1.5 Pro · 720p', frameExact: true, durations: [5, 10], resolution: '720p', cost: 0.7, shape: 'ultrawide · varies', audio: true, frames: 'literal', price: '$0.70 / clip' },
+    { id: 'doubao-seedance-1-5-pro_720p', name: 'Seedance 1.5 Pro · 720p', frameExact: true, durations: [5, 10], resolution: '720p', cost: 0.7, shape: 'ultrawide · varies', audio: true, frames: 'literal', recommended: true, price: '$0.70 / clip' },
     { id: 'doubao-seedance-1-5-pro_1080p', name: 'Seedance 1.5 Pro · 1080p', frameExact: true, durations: [5, 10], resolution: '1080p', cost: 1.56, shape: 'wide · varies', audio: true, frames: 'literal', price: '$1.56 / clip' },
     // Seedance 2.0 + Grok re-enabled 2026-08-01 (second pass): the earlier
     // failures were the GATEWAY's 20s submit timeout — slow video submits
     // (Seedance needs ~14s+) were aborted mid-flight. Gateway now gives video
     // submits a 120s deadline; both families re-verified there with real
     // renders. Seedance 2.0 bills PER SECOND — the price label must say so.
-    { id: 'doubao-seedance-2-0-mini', name: 'Seedance 2.0 Mini', durations: [3, 5, 10], resolution: '720p', cost: 1.0, price: '$1.00 / second' },
-    { id: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 Fast', durations: [3, 5, 10], resolution: '720p', cost: 1.61, price: '$1.61 / second' },
-    { id: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0', durations: [3, 5, 10], resolution: '720p', cost: 2.22, price: '$2.22 / second' },
+    { id: 'doubao-seedance-2-0-mini', name: 'Seedance 2.0 Mini', cost: 1.0, recommended: true, perSecond: true, durations: [5, 10, 12], resolution: '720p', price: '$1.00 / second' },
+    { id: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 Fast', cost: 1.61, recommended: true, perSecond: true, durations: [5, 10, 12], resolution: '720p', price: '$1.61 / second' },
+    { id: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0', cost: 2.22, recommended: true, perSecond: true, durations: [5, 10, 12], resolution: '720p', price: '$2.22 / second' },
     { id: 'grok-1.5-video-6s', name: 'Grok Video 1.5 · 6s', durations: [6], fixed: true, resolution: '720p', cost: 0.8, price: '$0.80 / clip' },
     { id: 'grok-video-3', name: 'Grok Video 3 · 6s', durations: [6], fixed: true, resolution: '720p', cost: 0.8, price: '$0.80 / clip' },
     { id: 'grok-video-3-10s', name: 'Grok Video 3 · 10s', durations: [10], fixed: true, resolution: '720p', cost: 0.8, price: '$0.80 / clip' },
-    { id: 'kling-3.0-omni-720p-noref-mute', name: 'Kling 3.0 Omni · silent', durations: [5, 10], resolution: '720p', cost: 1.2, price: '$1.20 / clip' },
-    { id: 'kling-3.0-omni-720p-noref-audio', name: 'Kling 3.0 Omni · audio', durations: [5, 10], resolution: '720p', cost: 1.6, price: '$1.60 / clip' },
-    { id: 'kling-3.0-omni-720p-ref-mute', name: 'Kling 3.0 Omni · ref silent', durations: [5, 10], resolution: '720p', cost: 1.6, price: '$1.60 / clip' },
-    { id: 'kling-3.0-omni-720p-ref-audio', name: 'Kling 3.0 Omni · ref audio', durations: [5, 10], resolution: '720p', cost: 2.2, price: '$2.20 / clip' },
-    { id: 'kling-3.0-omni', name: 'Kling 3.0 Omni · full', durations: [5, 10], resolution: '1080p', cost: 2.0, price: '$2.00 / clip' },
-    { id: 'viduq3-pro', name: 'Vidu Q3 Pro', durations: [5], fixed: true, resolution: '1080p', cost: 2.0, price: '$2.00 / clip' },
-    { id: 'viduq3-turbo', name: 'Vidu Q3 Turbo', durations: [5], fixed: true, resolution: '720p', cost: 2.0, price: '$2.00 / clip' },
-    { id: 'viduq2', name: 'Vidu Q2', durations: [5], fixed: true, resolution: '720p', cost: 2.0, price: '$2.00 / clip' },
-    { id: 'pixverse-c1-720p-audio', name: 'PixVerse C1 · audio', durations: [5], fixed: true, resolution: '720p', cost: 0.77, shape: '9:16 · 720x1280', audio: true, frames: 'described', price: '$0.77 / clip' },
-    { id: 'pixverse-v6-720p-audio', name: 'PixVerse V6 · audio', durations: [5], fixed: true, resolution: '720p', cost: 0.71, shape: '9:16 · 720x1280', audio: true, frames: 'described', price: '$0.71 / clip' },
-    { id: 'pixverse-v6-1080p-audio', name: 'PixVerse V6 · 1080p', durations: [5], fixed: true, resolution: '1080p', cost: 1.35, shape: '9:16 portrait', audio: true, frames: 'described', price: '$1.35 / clip' },
-    { id: 'veo-3-1-fast', name: 'Veo 3.1 Fast', durations: [8], fixed: true, resolution: '1080p', cost: 1.0, price: '$1.00 / clip' },
-    { id: 'veo-3-1', name: 'Veo 3.1', durations: [8], fixed: true, resolution: '1080p', cost: 1.6, price: '$1.60 / clip' },
+    { id: 'kling-3.0-omni-720p-noref-mute', name: 'Kling 3.0 Omni · silent', durations: [5, 10], resolution: '720p', cost: 1.2, shape: '16:9 · 1280x720', frames: 'described', price: '$1.20 / clip' },
+    { id: 'kling-3.0-omni-720p-noref-audio', name: 'Kling 3.0 Omni · audio', durations: [5, 10], resolution: '720p', cost: 1.6, shape: '16:9', audio: true, frames: 'described', recommended: true, price: '$1.60 / clip' },
+    { id: 'kling-3.0-omni-720p-ref-mute', name: 'Kling 3.0 Omni · ref silent', durations: [5, 10], resolution: '720p', cost: 1.6, shape: '16:9 · 1280x720', frames: 'described', price: '$1.60 / clip' },
+    { id: 'kling-3.0-omni-720p-ref-audio', name: 'Kling 3.0 Omni · ref audio', durations: [5, 10], resolution: '720p', cost: 2.2, shape: '16:9', audio: true, frames: 'described', price: '$2.20 / clip' },
+    { id: 'kling-3.0-omni', name: 'Kling 3.0 Omni · full', durations: [5, 10], resolution: '1080p', cost: 2.0, shape: '16:9', frames: 'described', price: '$2.00 / clip' },
+    { id: 'viduq3-pro', name: 'Vidu Q3 Pro', durations: [5], fixed: true, resolution: '1080p', cost: 2.0, shape: '16:9', frames: 'literal', price: '$2.00 / clip' },
+    { id: 'viduq3-turbo', name: 'Vidu Q3 Turbo', durations: [5], fixed: true, resolution: '720p', cost: 2.0, shape: '16:9 · 1284x716', frames: 'literal', recommended: true, price: '$2.00 / clip' },
+    { id: 'viduq2', name: 'Vidu Q2', durations: [5], fixed: true, resolution: '720p', cost: 2.0, shape: '16:9', frames: 'literal', price: '$2.00 / clip' },
+    { id: 'pixverse-c1-720p-audio', name: 'PixVerse C1 · audio', durations: [5], fixed: true, resolution: '720p', cost: 0.77, shape: '9:16 · 720x1280', audio: true, frames: 'ignored', price: '$0.77 / clip' },
+    { id: 'pixverse-v6-720p-audio', name: 'PixVerse V6 · audio', durations: [5], fixed: true, resolution: '720p', cost: 0.71, shape: '9:16 · 720x1280', audio: true, frames: 'ignored', price: '$0.71 / clip' },
+    { id: 'pixverse-v6-1080p-audio', name: 'PixVerse V6 · 1080p', durations: [5], fixed: true, resolution: '1080p', cost: 1.35, shape: '9:16 portrait', audio: true, frames: 'ignored', price: '$1.35 / clip' },
+    { id: 'models/veo-3.1-fast-generate-preview', name: 'Veo 3.1 Fast', durations: [8], fixed: true, resolution: '1080p', cost: 1.0, price: '$1.00 / clip' },
+    { id: 'models/veo-3.1-generate-preview', name: 'Veo 3.1', durations: [8], fixed: true, resolution: '1080p', cost: 1.6, price: '$1.60 / clip' },
 ];
 
 const IMAGE_CANDIDATES = [
@@ -87,9 +89,73 @@ async function probeVideoModel(apiKey, model) {
         // probe body — treating that as disabled hid a model that renders fine.
         const text = await response.text();
         if (/not an enabled video-generation model|Model not available/i.test(text)) return false;
+        // NOTE: do NOT try to infer channel health here. The gateway returns
+        // its generic "upstream provider is temporarily unavailable" for ANY
+        // upstream rejection — including a perfectly healthy model refusing
+        // this probe's empty prompt — so keying off it disabled the entire
+        // catalog. Health comes from real render outcomes (degradedModels).
         return true;
     } catch {
         return false;
+    }
+}
+
+// The gateway's catalog drifts (Veo's ids changed under us and every render
+// came back "Unknown model"). Intersect our metadata with the LIVE list so a
+// dead id can never reach the picker.
+async function liveModelIds(apiKey) {
+    try {
+        const response = await fetch(`${superbBase()}/models`, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        const ids = (data?.data || []).map((entry) => entry.id).filter(Boolean);
+        return ids.length > 0 ? new Set(ids) : null;
+    } catch {
+        return null; // unreachable list — fall back to probing everything
+    }
+}
+
+// Real evidence beats a synthetic probe: an empty-prompt probe fails
+// validation BEFORE the upstream is consulted, so it cannot see a dead
+// channel. Every render we run is recorded, so recent outcomes tell the
+// truth — a model whose last attempts all died upstream is marked degraded
+// and un-pickable, and un-marks itself the moment one succeeds again.
+const DEGRADED_WINDOW_HOURS = 3;
+const DEGRADED_MIN_FAILURES = 2;
+
+async function degradedModels() {
+    const pool = getPool();
+    if (!pool) return new Set();
+    try {
+        await ensureSchema();
+        const result = await pool.query(`
+            SELECT spec_json, status, error FROM render_jobs
+            WHERE created_at > now() - interval '${DEGRADED_WINDOW_HOURS} hours'
+              AND status IN ('done', 'failed')
+            ORDER BY created_at DESC LIMIT 400
+        `);
+        const stats = new Map(); // model -> { failures, succeeded }
+        for (const row of result.rows) {
+            let model = null;
+            try { model = JSON.parse(row.spec_json).model; } catch { continue; }
+            if (!model) continue;
+            const entry = stats.get(model) || { failures: 0, succeeded: false };
+            if (row.status === 'done') entry.succeeded = true;
+            else if (/temporarily unavailable|no available (platform|channel)|Unknown model|not an enabled/i.test(row.error || '')) {
+                entry.failures += 1;
+            }
+            stats.set(model, entry);
+        }
+        return new Set(
+            [...stats.entries()]
+                .filter(([, entry]) => !entry.succeeded && entry.failures >= DEGRADED_MIN_FAILURES)
+                .map(([model]) => model),
+        );
+    } catch {
+        return new Set();
     }
 }
 
@@ -104,14 +170,30 @@ export async function GET(request) {
         return NextResponse.json({ ...cached.payload, cached: true });
     }
 
-    const results = await Promise.all(
-        VIDEO_CANDIDATES.map(async (model) => ({
+    const live = await liveModelIds(apiKey);
+    const candidates = live
+        ? VIDEO_CANDIDATES.filter((model) => live.has(model.id))
+        : VIDEO_CANDIDATES;
+    const dropped = VIDEO_CANDIDATES.length - candidates.length;
+    if (dropped > 0) console.warn(`Capabilities: ${dropped} catalog id(s) are no longer on the gateway`);
+
+    const [results, degraded] = await Promise.all([
+        Promise.all(candidates.map(async (model) => ({
             model,
             enabled: await probeVideoModel(apiKey, model),
-        })),
-    );
+        }))),
+        degradedModels(),
+    ]);
 
-    const video = results.filter((entry) => entry.enabled).map((entry) => entry.model);
+    const video = results
+        .filter((entry) => entry.enabled)
+        .map((entry) => (degraded.has(entry.model.id)
+            ? { ...entry.model, degraded: true }
+            : entry.model))
+        // Recommended, healthy models lead the list; anything whose provider
+        // is currently failing sinks to the bottom.
+        .sort((a, b) => (Number(Boolean(b.recommended)) - Number(Boolean(a.recommended)))
+            || (Number(Boolean(a.degraded)) - Number(Boolean(b.degraded))));
     const payload = {
         video,
         image: IMAGE_CANDIDATES,

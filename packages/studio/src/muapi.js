@@ -318,6 +318,8 @@ export async function submitVideoJob(params) {
             model: params.videoModel || undefined,
             duration: durationForModel(params.videoModel, params.duration),
             aspect_ratio: params.aspect_ratio,
+            // Seedance 2.0 renders 720p only and rejects a submit without it.
+            resolution: capsVideoEntry(params.videoModel)?.resolution,
             image_url: startUrl,
             end_image_url: endUrl,
             ref_urls: refUrls.filter(Boolean),
