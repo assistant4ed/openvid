@@ -29,6 +29,7 @@ import {
   promptControlClassName,
   promptMediaButtonClassName,
 } from "./prompt/PromptComposer.jsx";
+import { notifyError } from "../utils/notify.js";
 
 // ---------------------------------------------------------------------------
 // Upload button states
@@ -203,7 +204,7 @@ function AssetsDropdown({
             onClick={() => setActiveTab(tab)}
             className={`flex-1 text-center py-1 text-xs font-bold capitalize transition-colors ${
               activeTab === tab
-                ? "text-[#22d3ee] border-b border-[#22d3ee]"
+                ? "text-[#d4f939] border-b border-[#d4f939]"
                 : "text-white/40 hover:text-white/80"
             }`}
           >
@@ -258,7 +259,7 @@ function AssetsDropdown({
                     e.stopPropagation();
                     setFullscreenUrl(item.url);
                   }}
-                  className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 flex items-center justify-center transition-opacity text-white hover:text-[#22d3ee]"
+                  className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 flex items-center justify-center transition-opacity text-white hover:text-[#d4f939]"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <circle cx="11" cy="11" r="8" />
@@ -283,7 +284,7 @@ function AssetsDropdown({
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  className="text-xs text-black font-black px-2.5 py-1 bg-[#22d3ee] rounded-md hover:bg-[#22d3ee]/90 transition-colors"
+                  className="text-xs text-black font-black px-2.5 py-1 bg-[#d4f939] rounded-md hover:bg-[#d4f939]/90 transition-colors"
                 >
                   Use
                 </button>
@@ -606,7 +607,7 @@ export default function RecastStudio({
   const handleVideoPick = useCallback(
     async (file) => {
       if (file.size > 50 * 1024 * 1024) {
-        alert("Video exceeds 50MB limit.");
+        notifyError("Video exceeds 50MB limit.");
         return;
       }
       setVideoState(UPLOAD_STATE.UPLOADING);
@@ -625,7 +626,7 @@ export default function RecastStudio({
         });
       } catch (err) {
         setVideoState(UPLOAD_STATE.IDLE);
-        alert(`Video upload failed: ${err.message}`);
+        notifyError(`Video upload failed: ${err.message}`);
       } finally {
         setVideoProgress(0);
       }
@@ -640,7 +641,7 @@ export default function RecastStudio({
   const handleImageUpload = useCallback(
     async (file) => {
       if (file.size > 10 * 1024 * 1024) {
-        alert("Image exceeds 10MB limit.");
+        notifyError("Image exceeds 10MB limit.");
         return;
       }
       setImageState(UPLOAD_STATE.UPLOADING);
@@ -659,7 +660,7 @@ export default function RecastStudio({
         });
       } catch (err) {
         setImageState(UPLOAD_STATE.IDLE);
-        alert(`Image upload failed: ${err.message}`);
+        notifyError(`Image upload failed: ${err.message}`);
       } finally {
         setImageProgress(0);
       }
@@ -712,11 +713,11 @@ export default function RecastStudio({
   // ── Generation ──────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!videoUrl) {
-      alert("Please upload a source video first.");
+      notifyError("Please upload a source video first.");
       return;
     }
     if (!imageUrl) {
-      alert("Please upload a character image first.");
+      notifyError("Please upload a character image first.");
       return;
     }
 
@@ -922,8 +923,8 @@ export default function RecastStudio({
             </div>
 
             <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-4 text-center px-4 flex flex-col items-center">
-              <span className="text-white font-black uppercase text-xl sm:text-3xl tracking-wide mb-1 opacity-90">START CREATING WITH</span>
-              <span className="text-[#22d3ee] font-black uppercase text-2xl sm:text-4xl sm:mt-1 tracking-tight">
+              <span className="slate-label slate-label--cyan mb-3">START CREATING WITH</span>
+              <span className="font-display font-bold text-3xl sm:text-5xl tracking-tight text-[#d4f939]">
                 BODY SWAP STUDIO
               </span>
             </h1>
@@ -943,7 +944,7 @@ export default function RecastStudio({
               <MediaPickerButton
                 accept="video/*"
                 label="Video"
-                icon={<VideoIcon className="text-white/40 group-hover:text-[#22d3ee] transition-colors" />}
+                icon={<VideoIcon className="text-white/40 group-hover:text-[#d4f939] transition-colors" />}
                 onUpload={handleVideoPick}
                 onClear={() => {
                   setVideoUrl(null);
@@ -961,7 +962,7 @@ export default function RecastStudio({
               <MediaPickerButton
                 accept="image/*"
                 label="Character image"
-                icon={<ImageIcon className="text-white/40 group-hover:text-[#22d3ee] transition-colors" />}
+                icon={<ImageIcon className="text-white/40 group-hover:text-[#d4f939] transition-colors" />}
                 onUpload={handleImageUpload}
                 onClear={() => {
                   setImageUrl(null);
@@ -1003,7 +1004,7 @@ export default function RecastStudio({
                     active: openDropdown === "model",
                   })}
                 >
-                  <div className="w-3.5 h-3.5 bg-[#22d3ee] rounded-sm flex items-center justify-center">
+                  <div className="w-3.5 h-3.5 bg-[#d4f939] rounded-sm flex items-center justify-center">
                     <span className="text-[9px] font-black text-black">R</span>
                   </div>
                   <span className={PROMPT_CONTROL_LABEL_CLASS}>
@@ -1113,12 +1114,12 @@ export default function RecastStudio({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    className="text-white/50 group-hover:text-[#22d3ee] transition-colors"
+                    className="text-white/50 group-hover:text-[#d4f939] transition-colors"
                   >
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                   </svg>
-                  <span className="text-xs font-semibold text-white/70 group-hover:text-[#22d3ee] transition-colors">
+                  <span className="text-xs font-semibold text-white/70 group-hover:text-[#d4f939] transition-colors">
                     Library
                   </span>
                   <PromptChevronIcon />

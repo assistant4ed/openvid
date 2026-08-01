@@ -1,0 +1,25 @@
+# Never ship local install state or build output — the image rebuilds both.
+node_modules
+node_modules.nosync
+**/node_modules
+.next
+.next.nosync
+**/.next
+dist
+**/dist
+release
+build/local-ai
+
+# Local-only
+.git
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vercel
+.claude
+
+# Large assets not needed by the server build
+thumbnail.png
+thumbnail-ai-v2-1920x1080.png

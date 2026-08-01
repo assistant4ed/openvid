@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { uploadFile, generateI2I } from "../muapi.js";
+import { notifyError } from "../utils/notify.js";
 
 export default function DrawModal({
   isOpen,
@@ -64,7 +65,7 @@ export default function DrawModal({
     "#f97316", // Orange
     "#eab308", // Yellow
     "#22c55e", // Green
-    "#3b82f6", // Blue
+    "#d4f939", // Blue
     "#a855f7", // Purple
     "#ffffff", // White
     "#000000", // Black
@@ -961,11 +962,11 @@ export default function DrawModal({
         }
       });
 
-      alert("Generations complete!");
+      notifyError("Generations complete!");
       onClose();
     } catch (e) {
       console.error("[DrawModal] Generation failed:", e);
-      alert(`Generation failed: ${e.message}`);
+      notifyError(`Generation failed: ${e.message}`);
     } finally {
       setGenerating(false);
     }
@@ -1779,7 +1780,7 @@ export default function DrawModal({
 
               <button
                 onClick={() =>
-                  alert(
+                  notifyError(
                     "Draw to Edit: paint directly over an image, insert overlay image/text objects, drag/resize elements, or select and delete specific components.",
                   )
                 }

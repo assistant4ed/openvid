@@ -1,4 +1,6 @@
 import { getModelById, getVideoModelById, getI2IModelById, getI2VModelById, getV2VModelById, getRecastModelById, getLipSyncModelById, getAudioModelById } from './models.js';
+import { notifyInfo } from './utils/notify.js';
+import { keyForVideoModel } from './utils/superbKeys.js';
 
 // In an http(s) browser we route through the host app's proxy (Next.js routes
 // under /api/* re-issue the call server-side) so api.muapi.ai CORS is bypassed.
@@ -60,7 +62,125 @@ async function submitAndPoll(endpoint, payload, key, onRequestId, maxAttempts = 
     return { ...result, url: outputUrl };
 }
 
+// Local mode: no cloud render key → images generate on the user's SuperbAPI
+// session via the app's own /api/superb-image route. Returns the same shape
+// the studios expect from the cloud path ({url}).
+// Upstream image decoders enforce a pixel budget, and phone photos blow past
+// it. Downscale every reference to <=1536px JPEG before it leaves the browser.
+const REF_MAX_EDGE = 1536;
+
+async function normalizeReference(dataUrl) {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return null;
+    try {
+        const img = await new Promise((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = () => reject(new Error('decode'));
+            el.src = dataUrl;
+        });
+        const scale = Math.min(1, REF_MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+        if (scale === 1 && dataUrl.length < 2_000_000) return dataUrl;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', 0.9);
+    } catch {
+        return dataUrl; // let the server report a decode problem honestly
+    }
+}
+
+// The Prompt Agent: expands terse user input into a full production prompt
+// (and states the inferred intent). Fails open — generation never blocks on it.
+async function enhancePrompt(superbKey, rawPrompt, mode, visionImages) {
+    const prompt = String(rawPrompt || '').trim();
+    // visionImages: [{role: 'start'|'end'|'ref', data: dataURL}] — any image
+    // forces the agent even for long prompts; the vision pass is what carries
+    // the pictures into the text-only video upstream.
+    const images = (visionImages || []).filter((entry) => entry?.data);
+    if (!prompt || (prompt.length > 350 && images.length === 0)) return { prompt, intent: null };
+    try {
+        const response = await fetch('/api/prompt-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
+            body: JSON.stringify({ prompt, mode, images: images.length > 0 ? images : undefined }),
+            signal: AbortSignal.timeout(60000),
+        });
+        if (!response.ok) return { prompt, intent: null, visionUsed: false };
+        const data = await response.json();
+        return {
+            prompt: data.expandedPrompt || prompt,
+            intent: data.intent || null,
+            visionUsed: data.visionUsed === true,
+        };
+    } catch {
+        return { prompt, intent: null, visionUsed: false };
+    }
+}
+
+// Railway kills in-flight requests during a deploy roll; the browser reports
+// that as a bare "Failed to fetch". Retry once after a short wait, and if it
+// still fails, say what actually happened instead of leaking fetch jargon.
+async function fetchWithRollRetry(url, options) {
+    try {
+        return await fetch(url, options);
+    } catch (error) {
+        if (!/failed to fetch|load failed|network/i.test(String(error?.message))) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        try {
+            return await fetch(url, options);
+        } catch {
+            throw new Error('The studio is redeploying or your connection dropped — try again in a few seconds.');
+        }
+    }
+}
+
+async function generateImageViaSuperb(params) {
+    const superbKey =
+        typeof window !== 'undefined' ? window.localStorage?.getItem('superbapi_key') : null;
+    if (!superbKey) {
+        throw new Error('Sign in with your SuperbAPI key to generate.');
+    }
+
+    const references = [];
+    const candidates = [
+        ...(Array.isArray(params.images_list) ? params.images_list : []),
+        ...(params.image_url ? [params.image_url] : []),
+    ];
+    for (const url of candidates) {
+        const normalized = await normalizeReference(url);
+        if (normalized) references.push(normalized);
+    }
+
+    const enhanced = await enhancePrompt(
+        superbKey,
+        params.prompt,
+        references.length > 0 ? 'i2i' : 't2i',
+    );
+
+    const response = await fetchWithRollRetry('/api/superb-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
+        body: JSON.stringify({ prompt: enhanced.prompt, images: references }),
+    });
+
+    if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail?.error || `Image generation failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    return {
+        url: data.images[0],
+        outputs: data.images,
+        status: 'completed',
+        enhancedPrompt: enhanced.prompt,
+        intent: enhanced.intent,
+    };
+}
+
 export async function generateImage(apiKey, params) {
+    if (!apiKey) return generateImageViaSuperb(params);
     const modelInfo = getModelById(params.model);
     const endpoint = modelInfo?.endpoint || params.model;
     const payload = { prompt: params.prompt };
@@ -80,6 +200,7 @@ export async function generateImage(apiKey, params) {
 }
 
 export async function generateI2I(apiKey, params) {
+    if (!apiKey) return generateImageViaSuperb(params);
     const modelInfo = getI2IModelById(params.model);
     const endpoint = modelInfo?.endpoint || params.model;
     const payload = {};
@@ -102,7 +223,227 @@ export async function generateI2I(apiKey, params) {
     return submitAndPoll(endpoint, payload, apiKey, params.onRequestId, 60);
 }
 
+
+// Local mode video: the gateway uses a submit/poll pair on /v1/videos, proxied
+// by the app's own /api/superb-video route so the key stays server-side.
+const SUPERB_VIDEO_POLL_MS = 6000;
+const SUPERB_VIDEO_MAX_POLLS = 150; // ~15 min ceiling
+
+
+// A locally uploaded frame is a data URL the gateway cannot fetch — park it on
+// the app's asset host and hand the gateway a real URL instead. This is what
+// makes "upload a picture, get a video of it" actually use the picture.
+async function hostedFrameUrl(source) {
+    if (typeof source !== 'string' || !source) return undefined;
+    if (source.startsWith('http')) return source;
+    if (!source.startsWith('data:image/')) return undefined;
+    try {
+        const response = await fetch('/api/asset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl: source }),
+        });
+        if (!response.ok) return undefined;
+        return (await response.json()).url;
+    } catch {
+        return undefined;
+    }
+}
+
+// The verified capabilities the shell probed for this key — the source of
+// truth for what duration shapes each video model accepts.
+function capsVideoEntry(modelId) {
+    if (typeof window === 'undefined' || !modelId) return null;
+    try {
+        const caps = JSON.parse(window.localStorage.getItem('superb_caps_v1') || 'null');
+        return caps?.video?.find((entry) => entry.id === modelId) || null;
+    } catch {
+        return null;
+    }
+}
+
+// Fixed-length models (Veo 8s, Grok 6s, PixVerse) REJECT a duration param —
+// omit it and let the upstream render its native length. Selectable models
+// get the nearest allowed value; unknown models keep the legacy Kling clamp.
+function durationForModel(modelId, requested) {
+    const entry = capsVideoEntry(modelId);
+    if (entry?.fixed) return undefined;
+    const wanted = Number(requested) || 5;
+    if (Array.isArray(entry?.durations) && entry.durations.length > 0) {
+        return entry.durations.reduce((best, value) =>
+            Math.abs(value - wanted) < Math.abs(best - wanted) ? value : best,
+        );
+    }
+    return wanted > 7 ? 10 : 5;
+}
+
+async function generateVideoViaSuperb(params) {
+    // Multi-key routing: highest-ranked key that supports the chosen model.
+    const superbKey =
+        typeof window !== 'undefined' ? keyForVideoModel(params.videoModel) : null;
+    if (!superbKey) throw new Error('Sign in with your SuperbAPI key to generate.');
+
+    const rawFrame = params.image_url || params.images_list?.[0];
+    const hostedFrame = await hostedFrameUrl(rawFrame);
+    // The render upstream currently DROPS image inputs on this route (verified
+    // with a marker frame). The vision pass below reads the actual frames and
+    // reconstructs the scene inside the prompt, so the output follows the
+    // user's pictures even though the upstream never sees the pixels. The
+    // hosted frame is still sent — the day the provider honors it, fidelity
+    // upgrades automatically.
+    const asVision = (source, role) =>
+        typeof source === 'string' && source.startsWith('data:image/') ? { role, data: source } : null;
+    const visionImages = [
+        asVision(rawFrame, 'start'),
+        asVision(params.end_image, 'end'),
+        ...(Array.isArray(params.style_refs) ? params.style_refs : [])
+            .map((ref) => asVision(ref, 'ref')),
+    ].filter(Boolean);
+    const enhancedVideo = await enhancePrompt(
+        superbKey,
+        params.prompt || 'bring this scene to life with natural motion',
+        hostedFrame || visionImages.length > 0 ? 'i2v' : 't2v',
+        visionImages,
+    );
+    if (visionImages.length > 0 && !enhancedVideo.visionUsed) {
+        notifyInfo(
+            'The vision model could not read your image(s) this run — rendering from your text only, so the result may not match them.',
+        );
+    }
+
+    const submit = await fetchWithRollRetry('/api/superb-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
+        body: JSON.stringify({
+            model: params.videoModel || undefined,
+            prompt: enhancedVideo.prompt,
+            // Duration shape comes from the probed capabilities: snapped to
+            // the model's allowed values, OMITTED for fixed-length models
+            // (they reject the param), legacy Kling clamp when unknown.
+            duration: durationForModel(params.videoModel, params.duration),
+            aspect_ratio: params.aspect_ratio,
+            image_url: hostedFrame,
+        }),
+    });
+    if (!submit.ok) {
+        const detail = await submit.json().catch(() => ({}));
+        throw new Error(detail?.error || `Video submit failed (${submit.status})`);
+    }
+    const { taskId } = await submit.json();
+    if (params.onRequestId) params.onRequestId(taskId);
+    if (params.onTaskId) params.onTaskId(taskId);
+
+    return pollSuperbVideoTask(taskId, superbKey);
+}
+
+// ── Server-side render jobs ─────────────────────────────────────────────────
+// The browser only captures the SPEC: frames are hosted, then POST /api/jobs
+// hands everything to the server (vision grounding, submit, polling, result
+// storage all run there). Closing the tab a second after clicking Generate
+// no longer loses the render.
+
+export async function submitVideoJob(params) {
+    const superbKey =
+        typeof window !== 'undefined' ? keyForVideoModel(params.videoModel) : null;
+    if (!superbKey) throw new Error('Sign in with your SuperbAPI key to generate.');
+
+    const [startUrl, endUrl, ...refUrls] = await Promise.all([
+        hostedFrameUrl(params.image_url || params.images_list?.[0]),
+        hostedFrameUrl(params.end_image),
+        ...(Array.isArray(params.style_refs) ? params.style_refs : []).map(hostedFrameUrl),
+    ]);
+
+    const submit = await fetchWithRollRetry('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
+        body: JSON.stringify({
+            prompt: params.prompt || 'bring this scene to life with natural motion',
+            model: params.videoModel || undefined,
+            duration: durationForModel(params.videoModel, params.duration),
+            aspect_ratio: params.aspect_ratio,
+            image_url: startUrl,
+            end_image_url: endUrl,
+            ref_urls: refUrls.filter(Boolean),
+        }),
+    });
+    if (!submit.ok) {
+        const detail = await submit.json().catch(() => ({}));
+        throw new Error(detail?.error || `Job submit failed (${submit.status})`);
+    }
+    const { jobId } = await submit.json();
+    if (params.onJobId) params.onJobId(jobId);
+    return pollRenderJob(jobId, superbKey);
+}
+
+const JOB_POLL_MS = 8000;
+const JOB_POLL_MAX = 160; // ~21 min ceiling
+
+export async function pollRenderJob(jobId, superbKeyMaybe) {
+    const superbKey = superbKeyMaybe ||
+        (typeof window !== 'undefined' ? window.localStorage.getItem('superbapi_key') : null);
+    if (!superbKey) throw new Error('Sign in with your SuperbAPI key first.');
+    for (let attempt = 0; attempt < JOB_POLL_MAX; attempt += 1) {
+        let job = null;
+        try {
+            const response = await fetch(`/api/jobs/${jobId}`, {
+                headers: { 'x-superb-key': superbKey },
+            });
+            if (response.status === 404) throw new Error('Job not found');
+            if (response.ok) job = await response.json();
+        } catch (error) {
+            if (error?.message === 'Job not found') throw error;
+            // transient — keep polling
+        }
+        if (job?.status === 'done' && job.videoUrl) {
+            if (job.visionUsed === false && job.spec?.hasStart) {
+                notifyInfo(
+                    'The vision model could not read your image(s) for this render — the result may not match them.',
+                );
+            }
+            return { url: job.videoUrl, visionUsed: job.visionUsed };
+        }
+        if (job?.status === 'failed') throw new Error(job.error || 'Render failed');
+        await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS));
+    }
+    throw new Error('Render timed out — check the task board later.');
+}
+
+/**
+ * Reconnect to a render that is already running upstream. The upstream keeps
+ * working regardless of the user's connection — a reload or a dropped network
+ * only loses the POLLING, so any stored taskId can resume here at any time.
+ */
+export async function pollSuperbVideoTask(taskId, superbKeyMaybe) {
+    const superbKey =
+        superbKeyMaybe ||
+        (typeof window !== 'undefined' ? window.localStorage?.getItem('superbapi_key') : null);
+    if (!taskId || !superbKey) throw new Error('Nothing to resume.');
+
+    for (let attempt = 0; attempt < SUPERB_VIDEO_MAX_POLLS; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, SUPERB_VIDEO_POLL_MS));
+        let poll;
+        try {
+            poll = await fetch(`/api/superb-video?taskId=${encodeURIComponent(taskId)}`, {
+                headers: { 'x-superb-key': superbKey },
+            });
+        } catch {
+            continue; // offline — the render keeps going; keep trying
+        }
+        if (!poll.ok) continue; // transient — keep polling
+        const data = await poll.json();
+        const status = String(data.status || '').toLowerCase();
+        if (['completed', 'succeeded', 'success'].includes(status) && data.videoUrl) {
+            return { url: data.videoUrl, outputs: [data.videoUrl], status: 'completed', request_id: taskId };
+        }
+        if (['failed', 'error'].includes(status)) {
+            throw new Error(data.error || 'Video generation failed upstream.');
+        }
+    }
+    throw new Error('Video generation timed out.');
+}
+
 export async function generateVideo(apiKey, params) {
+    if (!apiKey) return generateVideoViaSuperb(params);
     const modelInfo = getVideoModelById(params.model);
     const endpoint = modelInfo?.endpoint || params.model;
     const payload = {};
@@ -120,6 +461,7 @@ export async function generateVideo(apiKey, params) {
 }
 
 export async function generateI2V(apiKey, params) {
+    if (!apiKey) return generateVideoViaSuperb(params);
     const modelInfo = getI2VModelById(params.model);
     const endpoint = modelInfo?.endpoint || params.model;
     const payload = {};
@@ -227,7 +569,40 @@ export async function generateAudio(apiKey, params) {
     return submitAndPoll(endpoint, payload, apiKey, params.onRequestId, 900);
 }
 
+// Without a cloud render key there is no upload endpoint — reference files are
+// kept local as data URLs instead. Instant, private, and works directly as
+// multimodal input. Images only: a video that size as base64 would wreck
+// browser storage and no current backend accepts it anyway.
+const LOCAL_REF_MAX_BYTES = 8 * 1024 * 1024;
+
+function fileToDataUrl(file, onProgress) {
+    return new Promise((resolve, reject) => {
+        if (!file.type.startsWith('image/')) {
+            reject(new Error('Video and audio references need a cloud render backend — not available yet.'));
+            return;
+        }
+        if (file.size > LOCAL_REF_MAX_BYTES) {
+            reject(new Error('Reference images are limited to 8MB for local mode.'));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onprogress = (event) => {
+            if (onProgress && event.lengthComputable) {
+                onProgress(Math.round((event.loaded / event.total) * 100));
+            }
+        };
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Could not read the file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
 export function uploadFile(apiKey, file, onProgress) {
+    // No render key → local mode. This is the normal path now that the studio
+    // runs on a SuperbAPI session alone.
+    if (!apiKey) {
+        return fileToDataUrl(file, onProgress);
+    }
     return new Promise((resolve, reject) => {
         const url = `${BASE_URL}/api/v1/upload_file`;
         const formData = new FormData();

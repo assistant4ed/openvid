@@ -604,7 +604,7 @@ export default function AiInfluencerStudio({
               className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-bold transition-all shadow-lg ${
                 isGenerating
                   ? "bg-violet-600/40 text-white/60 cursor-not-allowed"
-                  : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-violet-600/30 hover:shadow-violet-500/40"
+                  : "bg-gradient-to-r from-violet-600 to-primary hover:from-violet-500 hover:to-primary text-white shadow-violet-600/30 hover:shadow-violet-500/40"
               }`}
             >
               {isGenerating ? (

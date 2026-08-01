@@ -43,6 +43,7 @@ import {
   promptControlClassName,
   promptMediaButtonClassName,
 } from "./prompt/PromptComposer.jsx";
+import { notifyError } from "../utils/notify.js";
 
 // ── tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ const CheckSvg = () => (
     height="16"
     viewBox="0 0 24 24"
     fill="none"
-    stroke="#22d3ee"
+    stroke="#d4f939"
     strokeWidth="4"
   >
     <polyline points="20 6 9 17 4 12" />
@@ -110,7 +111,7 @@ const VideoReadySvg = () => (
   >
     <polygon points="23 7 16 12 23 17 23 7" />
     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-    <polyline points="7 10 10 13 15 8" stroke="#22d3ee" strokeWidth="2.5" />
+    <polyline points="7 10 10 13 15 8" stroke="#d4f939" strokeWidth="2.5" />
   </svg>
 );
 
@@ -146,8 +147,50 @@ const PROVIDER_LOGOS = {
 
 const invertLogos = ['openai', 'blackforest', 'runway', 'ideogram', 'lightricks', 'grok'];
 
-function ModelDropdown({ imageMode, selectedModel, onSelect, onClose }) {
+function ModelDropdown({ imageMode, selectedModel, onSelect, onClose, capsModels }) {
   const [search, setSearch] = useState("");
+
+  // Capability mode: the key was probed and these are the ONLY models that
+  // will actually render — show them alone, clearly marked as verified.
+  if (capsModels) {
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="font-slate px-2 pb-2 pt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">
+          Verified on your key
+        </p>
+        {capsModels.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => {
+              onSelect(entry, false);
+              onClose();
+            }}
+            className={`flex items-center justify-between rounded-xl border p-3.5 text-left transition-all ${
+              selectedModel === entry.id
+                ? "border-[#d4f939]/40 bg-[#d4f939]/10"
+                : "border-transparent hover:border-white/10 hover:bg-white/5"
+            }`}
+          >
+            <span className="flex flex-col">
+              <span className={`text-sm font-semibold ${selectedModel === entry.id ? "text-[#d4f939]" : "text-white"}`}>
+                {entry.name}
+              </span>
+              <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">
+                {entry.durations.join("s / ")}s{entry.price ? ` · ${entry.price}` : ""} · renders on your key
+              </span>
+            </span>
+            {selectedModel === entry.id && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d4f939" strokeWidth="3">
+                <path d="M5 12l4 4L19 6" />
+              </svg>
+            )}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   const generationModels = imageMode ? i2vModels : t2vModels;
   
   // Find current model's provider to pre-select the provider tab ("slide")
@@ -172,17 +215,17 @@ function ModelDropdown({ imageMode, selectedModel, onSelect, onClose }) {
       case "openai":
         return { text: "O", bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" };
       case "google":
-        return { text: "G", bg: "bg-blue-500/10 text-blue-400 border-blue-500/25" };
+        return { text: "G", bg: "bg-primary/10 text-primary border-primary/25" };
       case "blackforest":
         return { text: "BF", bg: "bg-amber-500/10 text-amber-400 border-amber-500/25" };
       case "bytedance":
         return { text: "BD", bg: "bg-purple-500/10 text-purple-400 border-purple-500/25" };
       case "midjourney":
-        return { text: "MJ", bg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/25" };
+        return { text: "MJ", bg: "bg-primary/10 text-primary border-primary/25" };
       case "kling":
         return { text: "KL", bg: "bg-rose-500/10 text-rose-400 border-rose-500/25" };
       case "vidu":
-        return { text: "VD", bg: "bg-cyan-500/10 text-cyan-400 border-cyan-500/25" };
+        return { text: "VD", bg: "bg-primary/10 text-primary border-primary/25" };
       case "minimax":
         return { text: "MX", bg: "bg-pink-500/10 text-pink-400 border-pink-500/25" };
       case "ideogram":
@@ -190,7 +233,7 @@ function ModelDropdown({ imageMode, selectedModel, onSelect, onClose }) {
       case "luma":
         return { text: "LM", bg: "bg-teal-500/10 text-teal-400 border-teal-500/25" };
       case "alibaba":
-        return { text: "AL", bg: "bg-sky-500/10 text-sky-400 border-sky-500/25" };
+        return { text: "AL", bg: "bg-primary/10 text-primary border-primary/25" };
       case "leonardoai":
         return { text: "LE", bg: "bg-violet-500/10 text-violet-400 border-violet-500/25" };
       case "stability":
@@ -234,7 +277,7 @@ function ModelDropdown({ imageMode, selectedModel, onSelect, onClose }) {
 
   const getIconColor = (m, isV2V) => {
     if (isV2V) return "bg-orange-500/10 text-orange-400 border-orange-500/10";
-    if (m.id.includes("kling")) return "bg-blue-500/10 text-blue-400 border-blue-500/10";
+    if (m.id.includes("kling")) return "bg-primary/10 text-primary border-primary/10";
     if (m.id.includes("veo")) return "bg-purple-500/10 text-purple-400 border-purple-500/10";
     if (m.id.includes("sora")) return "bg-rose-500/10 text-rose-400 border-rose-500/10";
     return "bg-primary/10 text-primary border-primary/10";
@@ -485,6 +528,34 @@ export default function VideoStudio({
   // ── dropdown ──
   const [openDropdown, setOpenDropdown] = useState(null); // 'model'|'ar'|'duration'|'resolution'|'quality'|'mode'|null
 
+  // Key-verified render models (probed by the shell at sign-in). When present
+  // and no cloud render key is set, the picker offers ONLY these.
+  const [superbCaps, setSuperbCaps] = useState(null);
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem("superb_caps_v1") || "null");
+      if (stored?.video?.length) setSuperbCaps(stored);
+    } catch { /* catalog fallback below */ }
+    const handleCaps = (event) => setSuperbCaps(event.detail);
+    window.addEventListener("superb:caps", handleCaps);
+    return () => window.removeEventListener("superb:caps", handleCaps);
+  }, []);
+  const capsVideo = (!apiKey && superbCaps?.video) || [];
+  const capsMode = capsVideo.length > 0;
+  const capsModel = capsVideo.find((m) => m.id === selectedModel) || capsVideo[0] || null;
+
+  // Snap a stale (catalog) selection to a model the key can actually run.
+  useEffect(() => {
+    if (!capsMode || v2vMode) return;
+    if (!capsVideo.some((m) => m.id === selectedModel)) {
+      setSelectedModel(capsVideo[0].id);
+      setSelectedModelName(capsVideo[0].name);
+      setSelectedDuration(capsVideo[0].durations[0]);
+    } else if (capsModel && !capsModel.durations.includes(selectedDuration)) {
+      setSelectedDuration(capsModel.durations[0]);
+    }
+  }, [capsMode, capsVideo, capsModel, selectedModel, selectedDuration, v2vMode]);
+
   // ── prompt ──
   const [prompt, setPrompt] = useState("");
   const [promptDisabled, setPromptDisabled] = useState(false);
@@ -516,9 +587,11 @@ export default function VideoStudio({
   );
 
   const getCurrentDurations = useCallback(
-    (id) =>
-      imageMode ? getDurationsForI2VModel(id) : getDurationsForModel(id),
-    [imageMode],
+    (id) => {
+      if (capsMode) return capsVideo.find((m) => m.id === id)?.durations || [5, 10];
+      return imageMode ? getDurationsForI2VModel(id) : getDurationsForModel(id);
+    },
+    [imageMode, capsMode, capsVideo],
   );
 
   const getCurrentResolutions = useCallback(
@@ -785,7 +858,7 @@ export default function VideoStudio({
   const uploadImageReference = useCallback(
     async (file) => {
       if (file.size > 10 * 1024 * 1024) {
-        alert("Image exceeds 10MB limit.");
+        notifyError("Image exceeds 10MB limit.");
         return;
       }
 
@@ -796,7 +869,7 @@ export default function VideoStudio({
         applyImageReferenceUrl(url);
       } catch (err) {
         console.error("[VideoStudio] Image upload failed:", err);
-        alert(`Image upload failed: ${err.message}`);
+        notifyError(`Image upload failed: ${err.message}`);
       } finally {
         setImageUploading(false);
         setImageProgress(0);
@@ -808,7 +881,7 @@ export default function VideoStudio({
   const processDroppedVideo = useCallback(
     async (file) => {
       if (file.size > 50 * 1024 * 1024) {
-        alert("Video exceeds 50MB limit.");
+        notifyError("Video exceeds 50MB limit.");
         return;
       }
       setVideoUploading(true);
@@ -829,7 +902,7 @@ export default function VideoStudio({
         setPrompt("");
         setPromptDisabled(true);
       } catch (err) {
-        alert(`Video upload failed: ${err.message}`);
+        notifyError(`Video upload failed: ${err.message}`);
       } finally {
         setVideoUploading(false);
         setVideoProgress(0);
@@ -926,7 +999,7 @@ export default function VideoStudio({
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      alert("Image exceeds 10MB limit.");
+      notifyError("Image exceeds 10MB limit.");
       return;
     }
     setEndImageUploading(true);
@@ -937,7 +1010,7 @@ export default function VideoStudio({
       });
       setUploadedEndImageUrl(url);
     } catch (err) {
-      alert(`End frame upload failed: ${err.message}`);
+      notifyError(`End frame upload failed: ${err.message}`);
     } finally {
       setEndImageUploading(false);
       setEndImageProgress(0);
@@ -952,7 +1025,7 @@ export default function VideoStudio({
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 50 * 1024 * 1024) {
-      alert("Video exceeds 50MB limit.");
+      notifyError("Video exceeds 50MB limit.");
       return;
     }
     setVideoUploading(true);
@@ -990,7 +1063,7 @@ export default function VideoStudio({
       }
     } catch (err) {
       console.error("[VideoStudio] Video upload failed:", err);
-      alert(`Video upload failed: ${err.message}`);
+      notifyError(`Video upload failed: ${err.message}`);
     } finally {
       setVideoUploading(false);
       setVideoProgress(0);
@@ -1066,20 +1139,20 @@ export default function VideoStudio({
 
     if (v2vMode) {
       if (!uploadedVideoUrl) {
-        alert("Please upload a video first.");
+        notifyError("Please upload a video first.");
         return;
       }
       if (currentModel?.imageField && !uploadedImageUrl) {
-        alert("Please upload a reference image for motion control.");
+        notifyError("Please upload a reference image for motion control.");
         return;
       }
       if (currentModel?.promptRequired && !trimmedPrompt) {
-        alert("Please describe the motion you want.");
+        notifyError("Please describe the motion you want.");
         return;
       }
     } else if (isExtendMode) {
       if (!lastGenerationId) {
-        alert(
+        notifyError(
           "No Seedance 2.0 generation found to extend. Generate a video first.",
         );
         return;
@@ -1088,18 +1161,18 @@ export default function VideoStudio({
       const maxImgs = getMaxImagesForI2VModel(selectedModel);
       if (maxImgs > 2) {
         if (uploadedImageUrls.length === 0) {
-          alert("Please upload at least one reference image first.");
+          notifyError("Please upload at least one reference image first.");
           return;
         }
       } else {
         if (!uploadedImageUrl) {
-          alert("Please upload a start frame image first.");
+          notifyError("Please upload a start frame image first.");
           return;
         }
       }
     } else {
       if (!trimmedPrompt) {
-        alert("Please enter a prompt to generate a video.");
+        notifyError("Please enter a prompt to generate a video.");
         return;
       }
     }
@@ -1170,6 +1243,7 @@ export default function VideoStudio({
         if (selectedMode) i2vParams.mode = selectedMode;
         if (showEffect && selectedEffect) i2vParams.name = selectedEffect;
 
+        if (capsMode) i2vParams.videoModel = selectedModel;
         res = await generateI2V(apiKey, i2vParams);
         if (!res?.url) throw new Error("No video URL returned by API");
 
@@ -1225,6 +1299,7 @@ export default function VideoStudio({
         if (selectedQuality) params.quality = selectedQuality;
         if (selectedMode) params.mode = selectedMode;
 
+        if (capsMode) params.videoModel = selectedModel;
         res = await generateVideo(apiKey, params);
         if (!res?.url) throw new Error("No video URL returned by API");
 
@@ -1533,8 +1608,8 @@ export default function VideoStudio({
             </div>
 
             <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-4 text-center px-4 flex flex-col items-center">
-              <span className="text-white font-black uppercase text-xl sm:text-3xl tracking-wide mb-1 opacity-90">START CREATING WITH</span>
-              <span className="text-[#22d3ee] font-black uppercase text-2xl sm:text-4xl sm:mt-1 tracking-tight">
+              <span className="slate-label slate-label--cyan mb-3">START CREATING WITH</span>
+              <span className="font-display font-bold text-3xl sm:text-5xl tracking-tight text-[#d4f939]">
                 {selectedModelName}
               </span>
             </h1>
@@ -1575,7 +1650,7 @@ export default function VideoStudio({
                   >
                     ×
                   </button>
-                  <span className="absolute bottom-0.5 left-0.5 px-1 h-3.5 bg-black/60 rounded-md text-[7px] font-black text-[#22d3ee] leading-none flex items-center justify-center pointer-events-none">
+                  <span className="absolute bottom-0.5 left-0.5 px-1 h-3.5 bg-black/60 rounded-md text-[7px] font-black text-[#d4f939] leading-none flex items-center justify-center pointer-events-none">
                     END
                   </span>
                 </div>
@@ -1608,7 +1683,7 @@ export default function VideoStudio({
                       >
                         ×
                       </button>
-                      <span className="absolute bottom-0.5 right-0.5 px-1 h-3.5 bg-black/60 rounded-full text-[8px] font-black text-[#22d3ee] leading-none flex items-center justify-center pointer-events-none">
+                      <span className="absolute bottom-0.5 right-0.5 px-1 h-3.5 bg-black/60 rounded-full text-[8px] font-black text-[#d4f939] leading-none flex items-center justify-center pointer-events-none">
                         {idx + 1}
                       </span>
                     </div>
@@ -1654,13 +1729,13 @@ export default function VideoStudio({
                                 fill="transparent"
                                 strokeDasharray={88}
                                 strokeDashoffset={88 - (88 * imageProgress) / 100}
-                                className="text-[#22d3ee] transition-all duration-300"
+                                className="text-[#d4f939] transition-all duration-300"
                               />
                             </svg>
-                            <span className="absolute text-[9px] font-black text-[#22d3ee] leading-none">{imageProgress}%</span>
+                            <span className="absolute text-[9px] font-black text-[#d4f939] leading-none">{imageProgress}%</span>
                           </div>
                         ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/40 group-hover:text-[#22d3ee] transition-colors">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/40 group-hover:text-[#d4f939] transition-colors">
                             <line x1="12" y1="5" x2="12" y2="19" />
                             <line x1="5" y1="12" x2="19" y2="12" />
                           </svg>
@@ -1697,13 +1772,13 @@ export default function VideoStudio({
                                 fill="transparent"
                                 strokeDasharray={88}
                                 strokeDashoffset={88 - (88 * imageProgress) / 100}
-                                className="text-[#22d3ee] transition-all duration-300"
+                                className="text-[#d4f939] transition-all duration-300"
                               />
                             </svg>
-                            <span className="absolute text-[9px] font-black text-[#22d3ee] leading-none">{imageProgress}%</span>
+                            <span className="absolute text-[9px] font-black text-[#d4f939] leading-none">{imageProgress}%</span>
                           </div>
                         ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/40 group-hover:text-[#22d3ee] transition-colors">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/40 group-hover:text-[#d4f939] transition-colors">
                             <line x1="12" y1="5" x2="12" y2="19" />
                             <line x1="5" y1="12" x2="19" y2="12" />
                           </svg>
@@ -1743,13 +1818,13 @@ export default function VideoStudio({
                             fill="transparent"
                             strokeDasharray={88}
                             strokeDashoffset={88 - (88 * endImageProgress) / 100}
-                            className="text-[#22d3ee] transition-all duration-300"
+                            className="text-[#d4f939] transition-all duration-300"
                           />
                         </svg>
-                        <span className="absolute text-[9px] font-black text-[#22d3ee] leading-none">{endImageProgress}%</span>
+                        <span className="absolute text-[9px] font-black text-[#d4f939] leading-none">{endImageProgress}%</span>
                       </div>
                     ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/40 group-hover:text-[#22d3ee] transition-colors">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/40 group-hover:text-[#d4f939] transition-colors">
                         <line x1="12" y1="5" x2="12" y2="19" />
                         <line x1="5" y1="12" x2="19" y2="12" />
                       </svg>
@@ -1788,10 +1863,10 @@ export default function VideoStudio({
                             fill="transparent"
                             strokeDasharray={88}
                             strokeDashoffset={88 - (88 * videoProgress) / 100}
-                            className="text-[#22d3ee] transition-all duration-300"
+                            className="text-[#d4f939] transition-all duration-300"
                           />
                         </svg>
-                        <span className="absolute text-[9px] font-black text-[#22d3ee] leading-none">{videoProgress}%</span>
+                        <span className="absolute text-[9px] font-black text-[#d4f939] leading-none">{videoProgress}%</span>
                       </div>
                     ) : (
                       <svg
@@ -1801,7 +1876,7 @@ export default function VideoStudio({
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="2.5"
-                        className="text-white/40 group-hover:text-[#22d3ee] transition-colors"
+                        className="text-white/40 group-hover:text-[#d4f939] transition-colors"
                       >
                         <polygon points="23 7 16 12 23 17 23 7" fill="currentColor" />
                         <rect x="1" y="5" width="15" height="14" rx="2" ry="2" fill="currentColor" />
@@ -1885,6 +1960,7 @@ export default function VideoStudio({
                       selectedModel={selectedModel}
                       onSelect={handleModelSelect}
                       onClose={() => setOpenDropdown(null)}
+                      capsModels={capsMode && !v2vMode ? capsVideo : null}
                     />
                   </PromptPopover>
                 )}
@@ -2082,7 +2158,7 @@ export default function VideoStudio({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2.5"
-                    className="opacity-40 text-white group-hover:text-[#22d3ee] transition-colors"
+                    className="opacity-40 text-white group-hover:text-[#d4f939] transition-colors"
                   >
                     <path d="M12 20h9" />
                     <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />

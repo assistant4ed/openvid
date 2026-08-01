@@ -36,3 +36,7 @@ out/
 .env
 .env.*
 !.env.example
+
+# local-only
+node_modules.nosync/
+.claude/settings.local.json

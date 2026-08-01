@@ -3257,6 +3257,287 @@ export const getAspectRatiosForModel = (modelId) => {
 // ==========================================
 export const t2vModels = [
   {
+    "id": "seedance-2-t2v",
+    "name": "Seedance 2 T2V",
+    "endpoint": "seedance-v2.0-t2v",
+    "inputs": {
+      "prompt": {
+        "examples": [
+          "A determined penguin straps itself into a homemade rocket sled on an icy mountain. The rocket ignites with a massive burst and launches the penguin across the frozen landscape at insane speed, blasting through snowdrifts and leaving a fiery trail behind."
+        ],
+        "type": "string",
+        "title": "Prompt",
+        "description": "Text prompt describing the video. To use a fictional character, reference it inline with @character:<id> (the request_id from a completed Seedance 2 Character generation). Multiple characters are supported. Example: '@character:ab539e5f walks on the beach at sunset'."
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16",
+          "4:3",
+          "3:4"
+        ],
+        "title": "Aspect Ratio",
+        "type": "string",
+        "default": "16:9"
+      },
+      "duration": {
+        "enum": [
+          5,
+          10,
+          15
+        ],
+        "title": "Duration",
+        "type": "integer",
+        "default": 5
+      },
+      "quality": {
+        "enum": [
+          "high",
+          "basic"
+        ],
+        "title": "Quality",
+        "type": "string",
+        "default": "basic"
+      }
+    },
+    "provider": "bytedance",
+    "provider_name": "ByteDance"
+  },
+  {
+    "id": "seedance-2.5-text-to-video",
+    "name": "Seedance 2.5",
+    "endpoint": "seedance-2.5-text-to-video",
+    "inputs": {
+      "prompt": {
+        "examples": [
+          "A photorealistic aerial view of a vast ancient temple complex at golden hour, rivers of molten light streaming between colossal stone pillars, slow majestic crane shot ascending to reveal surrounding jungle, 4K cinematic depth and color grading."
+        ],
+        "description": "Text prompt describing the video scene and motion.",
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "3:4",
+          "4:3",
+          "21:9"
+        ],
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "type": "string",
+        "description": "Aspect ratio of the output video.",
+        "default": "16:9"
+      },
+      "resolution": {
+        "enum": [
+          "480p",
+          "720p",
+          "1080p",
+          "4K"
+        ],
+        "title": "Resolution",
+        "name": "resolution",
+        "type": "string",
+        "description": "Output video resolution.",
+        "default": "1080p"
+      },
+      "duration": {
+        "title": "Duration",
+        "name": "duration",
+        "type": "int",
+        "description": "The duration of the generated video in seconds.",
+        "default": 5,
+        "minValue": 4,
+        "maxValue": 16,
+        "step": 1
+      },
+      "generate_audio": {
+        "type": "boolean",
+        "title": "Generate Audio",
+        "name": "generate_audio",
+        "description": "Whether to generate audio for the video.",
+        "default": true
+      },
+      "camera_fixed": {
+        "type": "boolean",
+        "title": "Camera Fixed",
+        "name": "camera_fixed",
+        "description": "Whether to fix the camera position.",
+        "default": false
+      }
+    },
+    "provider": "bytedance",
+    "provider_name": "ByteDance"
+  },
+  {
+    "id": "veo3.1-text-to-video",
+    "name": "Veo 3.1",
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video."
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "type": "string",
+        "description": "Aspect ratio of the output video.",
+        "default": "16:9"
+      },
+      "duration": {
+        "enum": [
+          8
+        ],
+        "title": "Duration",
+        "name": "duration",
+        "type": "int",
+        "description": "The duration of the generated video in seconds",
+        "default": 8
+      },
+      "resolution": {
+        "enum": [
+          "1080p"
+        ],
+        "title": "Resolution",
+        "name": "resolution",
+        "type": "string",
+        "description": "The resolution of the generated video.",
+        "default": "1080p"
+      }
+    },
+    "provider": "google",
+    "provider_name": "Google"
+  },
+  {
+    "id": "veo3.1-fast-text-to-video",
+    "name": "Veo 3.1 Fast",
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video."
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "type": "string",
+        "description": "Aspect ratio of the output video.",
+        "default": "16:9"
+      },
+      "duration": {
+        "enum": [
+          8
+        ],
+        "title": "Duration",
+        "name": "duration",
+        "type": "int",
+        "description": "The duration of the generated video in seconds",
+        "default": 8
+      },
+      "resolution": {
+        "enum": [
+          "1080p"
+        ],
+        "title": "Resolution",
+        "name": "resolution",
+        "type": "string",
+        "description": "The resolution of the generated video.",
+        "default": "1080p"
+      }
+    },
+    "provider": "google",
+    "provider_name": "Google"
+  },
+  {
+    "id": "wan2.6-text-to-video",
+    "name": "Wan 2.6",
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "The prompt to generate the video"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "type": "string",
+        "description": "Aspect ratio of the output video.",
+        "default": "16:9"
+      },
+      "duration": {
+        "enum": [
+          5,
+          10,
+          15
+        ],
+        "title": "Duration",
+        "name": "duration",
+        "type": "int",
+        "description": "The duration of the generated video in seconds",
+        "default": 5
+      },
+      "resolution": {
+        "enum": [
+          "720p",
+          "1080p"
+        ],
+        "title": "Resolution",
+        "name": "resolution",
+        "type": "string",
+        "description": "The resolution of the generated video.",
+        "default": "720p"
+      }
+    },
+    "provider": "alibaba",
+    "provider_name": "Alibaba"
+  },
+  {
+    "id": "ltx-2-pro-text-to-video",
+    "name": "LTX 2 Pro",
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video."
+      },
+      "duration": {
+        "enum": [
+          6,
+          8,
+          10
+        ],
+        "title": "Duration",
+        "name": "duration",
+        "type": "int",
+        "description": "The duration of the generated video in seconds",
+        "default": 6
+      }
+    },
+    "provider": "lightricks",
+    "provider_name": "Lightricks"
+  },
+  {
     "id": "seedance-lite-t2v",
     "name": "Seedance Lite",
     "inputs": {
@@ -3890,96 +4171,6 @@ export const t2vModels = [
     "provider_name": "Google"
   },
   {
-    "id": "veo3.1-text-to-video",
-    "name": "Veo 3.1",
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video."
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16"
-        ],
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "type": "string",
-        "description": "Aspect ratio of the output video.",
-        "default": "16:9"
-      },
-      "duration": {
-        "enum": [
-          8
-        ],
-        "title": "Duration",
-        "name": "duration",
-        "type": "int",
-        "description": "The duration of the generated video in seconds",
-        "default": 8
-      },
-      "resolution": {
-        "enum": [
-          "1080p"
-        ],
-        "title": "Resolution",
-        "name": "resolution",
-        "type": "string",
-        "description": "The resolution of the generated video.",
-        "default": "1080p"
-      }
-    },
-    "provider": "google",
-    "provider_name": "Google"
-  },
-  {
-    "id": "veo3.1-fast-text-to-video",
-    "name": "Veo 3.1 Fast",
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video."
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16"
-        ],
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "type": "string",
-        "description": "Aspect ratio of the output video.",
-        "default": "16:9"
-      },
-      "duration": {
-        "enum": [
-          8
-        ],
-        "title": "Duration",
-        "name": "duration",
-        "type": "int",
-        "description": "The duration of the generated video in seconds",
-        "default": 8
-      },
-      "resolution": {
-        "enum": [
-          "1080p"
-        ],
-        "title": "Resolution",
-        "name": "resolution",
-        "type": "string",
-        "description": "The resolution of the generated video.",
-        "default": "1080p"
-      }
-    },
-    "provider": "google",
-    "provider_name": "Google"
-  },
-  {
     "id": "veo3.1-lite-text-to-video",
     "name": "Veo 3.1 Lite",
     "inputs": {
@@ -4303,54 +4494,6 @@ export const t2vModels = [
         "minValue": 5,
         "maxValue": 10,
         "step": 5
-      },
-      "resolution": {
-        "enum": [
-          "720p",
-          "1080p"
-        ],
-        "title": "Resolution",
-        "name": "resolution",
-        "type": "string",
-        "description": "The resolution of the generated video.",
-        "default": "720p"
-      }
-    },
-    "provider": "alibaba",
-    "provider_name": "Alibaba"
-  },
-  {
-    "id": "wan2.6-text-to-video",
-    "name": "Wan 2.6",
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "The prompt to generate the video"
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16"
-        ],
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "type": "string",
-        "description": "Aspect ratio of the output video.",
-        "default": "16:9"
-      },
-      "duration": {
-        "enum": [
-          5,
-          10,
-          15
-        ],
-        "title": "Duration",
-        "name": "duration",
-        "type": "int",
-        "description": "The duration of the generated video in seconds",
-        "default": 5
       },
       "resolution": {
         "enum": [
@@ -4936,32 +5079,6 @@ export const t2vModels = [
     "provider_name": "xAI"
   },
   {
-    "id": "ltx-2-pro-text-to-video",
-    "name": "LTX 2 Pro",
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video."
-      },
-      "duration": {
-        "enum": [
-          6,
-          8,
-          10
-        ],
-        "title": "Duration",
-        "name": "duration",
-        "type": "int",
-        "description": "The duration of the generated video in seconds",
-        "default": 6
-      }
-    },
-    "provider": "lightricks",
-    "provider_name": "Lightricks"
-  },
-  {
     "id": "ltx-2-fast-text-to-video",
     "name": "LTX 2 Fast",
     "inputs": {
@@ -5038,8 +5155,7 @@ export const t2vModels = [
     },
     "provider": "lightricks",
     "provider_name": "Lightricks"
-  }
-,
+  },
   {
     "id": "veo3.1-extend-video",
     "name": "Veo3.1 Extend Video",
@@ -5090,53 +5206,6 @@ export const t2vModels = [
     },
     "provider": "google",
     "provider_name": "Google"
-  },
-  {
-    "id": "seedance-2-t2v",
-    "name": "Seedance 2 T2V",
-    "endpoint": "seedance-v2.0-t2v",
-    "inputs": {
-      "prompt": {
-        "examples": [
-          "A determined penguin straps itself into a homemade rocket sled on an icy mountain. The rocket ignites with a massive burst and launches the penguin across the frozen landscape at insane speed, blasting through snowdrifts and leaving a fiery trail behind."
-        ],
-        "type": "string",
-        "title": "Prompt",
-        "description": "Text prompt describing the video. To use a fictional character, reference it inline with @character:<id> (the request_id from a completed Seedance 2 Character generation). Multiple characters are supported. Example: '@character:ab539e5f walks on the beach at sunset'."
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16",
-          "4:3",
-          "3:4"
-        ],
-        "title": "Aspect Ratio",
-        "type": "string",
-        "default": "16:9"
-      },
-      "duration": {
-        "enum": [
-          5,
-          10,
-          15
-        ],
-        "title": "Duration",
-        "type": "integer",
-        "default": 5
-      },
-      "quality": {
-        "enum": [
-          "high",
-          "basic"
-        ],
-        "title": "Quality",
-        "type": "string",
-        "default": "basic"
-      }
-    },
-    "provider": "bytedance",
-    "provider_name": "ByteDance"
   },
   {
     "id": "seedance-2-extend",
@@ -6942,76 +7011,6 @@ export const t2vModels = [
         "default": 5,
         "minValue": 4,
         "maxValue": 12,
-        "step": 1
-      },
-      "generate_audio": {
-        "type": "boolean",
-        "title": "Generate Audio",
-        "name": "generate_audio",
-        "description": "Whether to generate audio for the video.",
-        "default": true
-      },
-      "camera_fixed": {
-        "type": "boolean",
-        "title": "Camera Fixed",
-        "name": "camera_fixed",
-        "description": "Whether to fix the camera position.",
-        "default": false
-      }
-    },
-    "provider": "bytedance",
-    "provider_name": "ByteDance"
-  },
-  {
-    "id": "seedance-2.5-text-to-video",
-    "name": "Seedance 2.5",
-    "endpoint": "seedance-2.5-text-to-video",
-    "inputs": {
-      "prompt": {
-        "examples": [
-          "A photorealistic aerial view of a vast ancient temple complex at golden hour, rivers of molten light streaming between colossal stone pillars, slow majestic crane shot ascending to reveal surrounding jungle, 4K cinematic depth and color grading."
-        ],
-        "description": "Text prompt describing the video scene and motion.",
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt"
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16",
-          "1:1",
-          "3:4",
-          "4:3",
-          "21:9"
-        ],
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "type": "string",
-        "description": "Aspect ratio of the output video.",
-        "default": "16:9"
-      },
-      "resolution": {
-        "enum": [
-          "480p",
-          "720p",
-          "1080p",
-          "4K"
-        ],
-        "title": "Resolution",
-        "name": "resolution",
-        "type": "string",
-        "description": "Output video resolution.",
-        "default": "1080p"
-      },
-      "duration": {
-        "title": "Duration",
-        "name": "duration",
-        "type": "int",
-        "description": "The duration of the generated video in seconds.",
-        "default": 5,
-        "minValue": 4,
-        "maxValue": 16,
         "step": 1
       },
       "generate_audio": {
@@ -10777,6 +10776,466 @@ export const i2iModels = [
 // Auto-generated from schema_data.json — Image to Video models
 export const i2vModels = [
   {
+    "id": "seedance-2-i2v",
+    "name": "Seedance 2 I2V",
+    "endpoint": "seedance-v2.0-i2v",
+    "family": "sd-v2.0",
+    "imageField": "images_list",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "examples": [
+          "The lightbulb suddenly rockets across the room like a missile, smashing through curtains while water spins violently inside. The fish darts through swirling currents as the bulb ricochets off walls and finally bursts into floating droplets."
+        ],
+        "type": "string",
+        "title": "Prompt",
+        "description": "Text prompt describing the video animation. Reference uploaded images using @image1, @image2, … @imageN (1-based, matching images_list order). To use a fictional character, reference it with @character:<id> (request_id from a completed Seedance 2 Character generation) — characters are automatically appended to images_list. Multiple characters are supported. Example: '@character:ab539e5f walks through a garden' or 'The cat in @image1 meets @character:ab539e5f'."
+      },
+      "images_list": {
+        "examples": [
+          "https://d3adwkbyhxyrtq.cloudfront.net/webassets/videomodels/seedance-v2.0-i2v.jpg"
+        ],
+        "description": "Upload up to 9 image URLs. Reference them in the prompt using @image1, @image2, … @image9. The aspect ratio of the reference image takes precedence over the aspect_ratio parameter.",
+        "field": "images_list",
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "title": "Image URLs",
+        "name": "images_list",
+        "maxItems": 9
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16",
+          "4:3",
+          "3:4"
+        ],
+        "title": "Aspect Ratio",
+        "type": "string",
+        "default": "16:9"
+      },
+      "duration": {
+        "enum": [
+          5,
+          10,
+          15
+        ],
+        "title": "Duration",
+        "type": "integer",
+        "default": 5
+      },
+      "quality": {
+        "enum": [
+          "high",
+          "basic"
+        ],
+        "title": "Quality",
+        "type": "string",
+        "default": "basic"
+      }
+    },
+    "provider": "bytedance",
+    "provider_name": "ByteDance"
+  },
+  {
+    "id": "seedance-2.5-image-to-video",
+    "name": "Seedance 2.5",
+    "endpoint": "seedance-2.5-image-to-video",
+    "family": "seedance-2.5",
+    "imageField": "image_url",
+    "lastImageField": "last_image",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "examples": [
+          "Cinematic slow dolly forward through a surreal neon cityscape at night, rain-slicked streets reflecting towers of light, shallow depth of field, photorealistic 4K quality."
+        ],
+        "description": "Text prompt describing the video motion and style.",
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt"
+      },
+      "image_url": {
+        "examples": [
+          "https://d3adwkbyhxyrtq.cloudfront.net/webassets/videomodels/seedance-v1.5-pro-i2v.jpg"
+        ],
+        "description": "URL of the input image to animate into video.",
+        "field": "image",
+        "type": "string",
+        "title": "Image URL",
+        "name": "image_url"
+      },
+      "last_image": {
+        "examples": [
+          null
+        ],
+        "description": "Optional URL of the last frame image for first-last frame control.",
+        "field": "image",
+        "type": "string",
+        "title": "Last Image",
+        "name": "last_image"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "3:4",
+          "4:3",
+          "21:9"
+        ],
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "type": "string",
+        "description": "Aspect ratio of the output video.",
+        "default": "16:9"
+      },
+      "resolution": {
+        "enum": [
+          "480p",
+          "720p",
+          "1080p",
+          "4K"
+        ],
+        "title": "Resolution",
+        "name": "resolution",
+        "type": "string",
+        "description": "Output video resolution.",
+        "default": "1080p"
+      },
+      "duration": {
+        "title": "Duration",
+        "name": "duration",
+        "type": "int",
+        "description": "The duration of the generated video in seconds.",
+        "default": 5,
+        "minValue": 4,
+        "maxValue": 16,
+        "step": 1
+      },
+      "generate_audio": {
+        "type": "boolean",
+        "title": "Generate Audio",
+        "name": "generate_audio",
+        "description": "Whether to generate audio for the video.",
+        "default": true
+      },
+      "camera_fixed": {
+        "type": "boolean",
+        "title": "Camera Fixed",
+        "name": "camera_fixed",
+        "description": "Whether to fix the camera position.",
+        "default": false
+      }
+    },
+    "provider": "bytedance",
+    "provider_name": "ByteDance"
+  },
+  {
+    "id": "veo3.1-image-to-video",
+    "name": "Veo3.1 Image To Video",
+    "endpoint": "veo3.1-image-to-video",
+    "family": "veo3.1",
+    "imageField": "image_url",
+    "lastImageField": "last_image",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video.",
+        "examples": [
+          "Scene: Giant floating library orbiting in zero-gravity space.\nCharacters: Astronaut-librarian flipping glowing pages suspended midair.\nAction: Camera rotates 360° around drifting books → zooms through a floating page into a nebula outside window.\nCamera: Orbit + push-through transition.\nLighting: Cool cosmic ambient with warm page glows; rim lighting on suit.\nMotion: Slow rotational drift; pages react with fluid inertia.\nAudio: Ethereal synth pads + book rustle in vacuum hush.\nMood: Awe, wonder, intellectual calm.\nLine: “Wow veo3.1 launched in Muapiapp. Let's go!”"
+        ]
+      },
+      "aspect_ratio": {
+        "type": "string",
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "description": "Aspect ratio of the output video.",
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "default": "16:9"
+      },
+      "duration": {
+        "type": "int",
+        "title": "Duration",
+        "name": "duration",
+        "description": "The duration of the generated video in seconds",
+        "enum": [
+          8
+        ],
+        "default": 8
+      },
+      "resolution": {
+        "type": "string",
+        "title": "Resolution",
+        "name": "resolution",
+        "description": "The resolution of the generated video.",
+        "enum": [
+          "1080p"
+        ],
+        "default": "1080p"
+      }
+    },
+    "provider": "google",
+    "provider_name": "Google"
+  },
+  {
+    "id": "veo3.1-fast-image-to-video",
+    "name": "Veo3.1 Fast Image To Video",
+    "endpoint": "veo3.1-fast-image-to-video",
+    "family": "veo3.1",
+    "imageField": "image_url",
+    "lastImageField": "last_image",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video.",
+        "examples": [
+          "Scene: Lantern festival by the river at night.\nCharacters: Young boy with his grandmother.\nAction: Camera starts behind them → tracks one lantern downstream → lift to sky full of lights.\nLighting: Warm candlelight vs cool night reflections.\nAudio: Gentle music, water flow.\nDialogue:\nGrandmother: “Every lantern carries a wish.”\nBoy: “Then mine’s for you to stay forever.”\nGrandmother (smiling): “I’ll be right there, glowing among them.”"
+        ]
+      },
+      "aspect_ratio": {
+        "type": "string",
+        "title": "Aspect Ratio",
+        "name": "aspect_ratio",
+        "description": "Aspect ratio of the output video.",
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "default": "16:9"
+      },
+      "duration": {
+        "type": "int",
+        "title": "Duration",
+        "name": "duration",
+        "description": "The duration of the generated video in seconds",
+        "enum": [
+          8
+        ],
+        "default": 8
+      },
+      "resolution": {
+        "type": "string",
+        "title": "Resolution",
+        "name": "resolution",
+        "description": "The resolution of the generated video.",
+        "enum": [
+          "1080p"
+        ],
+        "default": "1080p"
+      }
+    },
+    "provider": "google",
+    "provider_name": "Google"
+  },
+  {
+    "id": "kling-v2.6-pro-i2v",
+    "name": "Kling v2.6 Pro I2V",
+    "endpoint": "kling-v2.6-pro-i2v",
+    "family": "kling-v2.6",
+    "imageField": "image_url",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "The prompt to generate the video",
+        "examples": [
+          "Slow cinematic orbit around the floating obsidian throne, holographic runes pulsing gently, drifting quartz shards rotating with soft parallax, molten crystal canyon glowing brighter with movement, and subtle particle storms rising toward the cosmic vortex; maintain original lighting, style, and atmosphere."
+        ]
+      },
+      "duration": {
+        "type": "int",
+        "title": "Duration",
+        "name": "duration",
+        "description": "The duration of the generated video in seconds.",
+        "enum": [
+          5,
+          10
+        ],
+        "default": 5
+      },
+      "sound": {
+        "type": "boolean",
+        "title": "Sound",
+        "name": "sound",
+        "description": "Whether sound is generated simultaneously when generating a video.",
+        "default": true
+      }
+    },
+    "provider": "kling",
+    "provider_name": "Kling AI"
+  },
+  {
+    "id": "kling-v2.5-turbo-pro-i2v",
+    "name": "Kling v2.5 Turbo Pro I2V",
+    "endpoint": "kling-v2.5-turbo-pro-i2v",
+    "family": "kling-v2.5",
+    "imageField": "image_url",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video.",
+        "examples": [
+          "Animate subtle cloak movement, glowing energy pulsing from the staff, storm clouds rolling above, camera orbiting slightly to add depth and atmosphere."
+        ]
+      },
+      "duration": {
+        "type": "int",
+        "title": "Duration",
+        "name": "duration",
+        "description": "The duration of the generated video in seconds",
+        "default": 5,
+        "minValue": 5,
+        "maxValue": 10,
+        "step": 5
+      }
+    },
+    "provider": "kling",
+    "provider_name": "Kling AI"
+  },
+  {
+    "id": "wan2.6-image-to-video",
+    "name": "Wan2.6 Image To Video",
+    "endpoint": "wan2.6-image-to-video",
+    "family": "wan2.6",
+    "imageField": "image_url",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "The prompt to generate the video",
+        "examples": [
+          "Add slow cinematic camera movement circling the floating lighthouse, orbiting symbol rings rotating gently with parallax depth, ocean waves shimmering and moving naturally, clouds drifting and lightning flashing subtly in the distance, and the lighthouse beam pulsing softly while preserving the original lighting and dramatic mood."
+        ]
+      },
+      "resolution": {
+        "type": "string",
+        "title": "Resolution",
+        "name": "resolution",
+        "description": "The resolution of the generated video.",
+        "enum": [
+          "720p",
+          "1080p"
+        ],
+        "default": "720p"
+      },
+      "duration": {
+        "type": "int",
+        "title": "Duration",
+        "name": "duration",
+        "description": "The duration of the generated video in seconds",
+        "enum": [
+          5,
+          10,
+          15
+        ],
+        "default": 5
+      },
+      "shot_type": {
+        "type": "string",
+        "title": "Shot Type",
+        "name": "shot_type",
+        "description": "The type of shot to generate.",
+        "enum": [
+          "single",
+          "multi"
+        ],
+        "default": "single"
+      }
+    },
+    "provider": "alibaba",
+    "provider_name": "Alibaba"
+  },
+  {
+    "id": "minimax-hailuo-2.3-pro-i2v",
+    "name": "Minimax Hailuo 2.3 Pro I2V",
+    "endpoint": "minimax-hailuo-2.3-pro-i2v",
+    "family": "minimax-2.3",
+    "imageField": "image_url",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video.",
+        "examples": [
+          "The camera slowly moves around the woman as the wind gently sways the tall grass. Her hair flows with the breeze, sunlight flickering through passing clouds. The atmosphere feels calm, nostalgic, and cinematic."
+        ]
+      },
+      "resolution": {
+        "type": "string",
+        "title": "Resolution",
+        "name": "resolution",
+        "description": "The resolution of the generated video.",
+        "enum": [
+          "1080p"
+        ],
+        "default": "1080p"
+      }
+    },
+    "provider": "minimax",
+    "provider_name": "Minimax"
+  },
+  {
+    "id": "ltx-2-pro-image-to-video",
+    "name": "Ltx 2 Pro Image To Video",
+    "endpoint": "ltx-2-pro-image-to-video",
+    "family": "ltx",
+    "imageField": "image_url",
+    "hasPrompt": true,
+    "inputs": {
+      "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "name": "prompt",
+        "description": "Text prompt describing the video.",
+        "examples": [
+          "An ancient stone portal deep in an enchanted forest, glowing runes, beams of sunlight breaking through the canopy, cinematic tracking shot, warm colour grading."
+        ]
+      },
+      "duration": {
+        "type": "int",
+        "title": "Duration",
+        "name": "duration",
+        "description": "The duration of the generated video in seconds",
+        "enum": [
+          6,
+          8,
+          10
+        ],
+        "default": 6
+      },
+      "generate_audio": {
+        "type": "boolean",
+        "title": "Generate Audio",
+        "name": "generate_audio",
+        "description": "Whether to generate audio.",
+        "default": true
+      }
+    },
+    "provider": "lightricks",
+    "provider_name": "Lightricks"
+  },
+  {
     "id": "ai-video-effects",
     "name": "AI Video Effects",
     "endpoint": "generate_wan_ai_effects",
@@ -12208,37 +12667,6 @@ export const i2vModels = [
     "provider_name": "Alibaba"
   },
   {
-    "id": "kling-v2.5-turbo-pro-i2v",
-    "name": "Kling v2.5 Turbo Pro I2V",
-    "endpoint": "kling-v2.5-turbo-pro-i2v",
-    "family": "kling-v2.5",
-    "imageField": "image_url",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video.",
-        "examples": [
-          "Animate subtle cloak movement, glowing energy pulsing from the staff, storm clouds rolling above, camera orbiting slightly to add depth and atmosphere."
-        ]
-      },
-      "duration": {
-        "type": "int",
-        "title": "Duration",
-        "name": "duration",
-        "description": "The duration of the generated video in seconds",
-        "default": 5,
-        "minValue": 5,
-        "maxValue": 10,
-        "step": 5
-      }
-    },
-    "provider": "kling",
-    "provider_name": "Kling AI"
-  },
-  {
     "id": "wan2.5-image-to-video",
     "name": "Wan2.5 Image To Video",
     "endpoint": "wan2.5-image-to-video",
@@ -12489,112 +12917,6 @@ export const i2vModels = [
     "provider_name": "Leonardo AI"
   },
   {
-    "id": "veo3.1-image-to-video",
-    "name": "Veo3.1 Image To Video",
-    "endpoint": "veo3.1-image-to-video",
-    "family": "veo3.1",
-    "imageField": "image_url",
-    "lastImageField": "last_image",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video.",
-        "examples": [
-          "Scene: Giant floating library orbiting in zero-gravity space.\nCharacters: Astronaut-librarian flipping glowing pages suspended midair.\nAction: Camera rotates 360° around drifting books → zooms through a floating page into a nebula outside window.\nCamera: Orbit + push-through transition.\nLighting: Cool cosmic ambient with warm page glows; rim lighting on suit.\nMotion: Slow rotational drift; pages react with fluid inertia.\nAudio: Ethereal synth pads + book rustle in vacuum hush.\nMood: Awe, wonder, intellectual calm.\nLine: “Wow veo3.1 launched in Muapiapp. Let's go!”"
-        ]
-      },
-      "aspect_ratio": {
-        "type": "string",
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "description": "Aspect ratio of the output video.",
-        "enum": [
-          "16:9",
-          "9:16"
-        ],
-        "default": "16:9"
-      },
-      "duration": {
-        "type": "int",
-        "title": "Duration",
-        "name": "duration",
-        "description": "The duration of the generated video in seconds",
-        "enum": [
-          8
-        ],
-        "default": 8
-      },
-      "resolution": {
-        "type": "string",
-        "title": "Resolution",
-        "name": "resolution",
-        "description": "The resolution of the generated video.",
-        "enum": [
-          "1080p"
-        ],
-        "default": "1080p"
-      }
-    },
-    "provider": "google",
-    "provider_name": "Google"
-  },
-  {
-    "id": "veo3.1-fast-image-to-video",
-    "name": "Veo3.1 Fast Image To Video",
-    "endpoint": "veo3.1-fast-image-to-video",
-    "family": "veo3.1",
-    "imageField": "image_url",
-    "lastImageField": "last_image",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video.",
-        "examples": [
-          "Scene: Lantern festival by the river at night.\nCharacters: Young boy with his grandmother.\nAction: Camera starts behind them → tracks one lantern downstream → lift to sky full of lights.\nLighting: Warm candlelight vs cool night reflections.\nAudio: Gentle music, water flow.\nDialogue:\nGrandmother: “Every lantern carries a wish.”\nBoy: “Then mine’s for you to stay forever.”\nGrandmother (smiling): “I’ll be right there, glowing among them.”"
-        ]
-      },
-      "aspect_ratio": {
-        "type": "string",
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "description": "Aspect ratio of the output video.",
-        "enum": [
-          "16:9",
-          "9:16"
-        ],
-        "default": "16:9"
-      },
-      "duration": {
-        "type": "int",
-        "title": "Duration",
-        "name": "duration",
-        "description": "The duration of the generated video in seconds",
-        "enum": [
-          8
-        ],
-        "default": 8
-      },
-      "resolution": {
-        "type": "string",
-        "title": "Resolution",
-        "name": "resolution",
-        "description": "The resolution of the generated video.",
-        "enum": [
-          "1080p"
-        ],
-        "default": "1080p"
-      }
-    },
-    "provider": "google",
-    "provider_name": "Google"
-  },
-  {
     "id": "veo3.1-lite-image-to-video",
     "name": "Veo3.1 Lite Image To Video",
     "endpoint": "veo3.1-lite-image-to-video",
@@ -12743,46 +13065,6 @@ export const i2vModels = [
     },
     "provider": "bytedance",
     "provider_name": "ByteDance"
-  },
-  {
-    "id": "ltx-2-pro-image-to-video",
-    "name": "Ltx 2 Pro Image To Video",
-    "endpoint": "ltx-2-pro-image-to-video",
-    "family": "ltx",
-    "imageField": "image_url",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video.",
-        "examples": [
-          "An ancient stone portal deep in an enchanted forest, glowing runes, beams of sunlight breaking through the canopy, cinematic tracking shot, warm colour grading."
-        ]
-      },
-      "duration": {
-        "type": "int",
-        "title": "Duration",
-        "name": "duration",
-        "description": "The duration of the generated video in seconds",
-        "enum": [
-          6,
-          8,
-          10
-        ],
-        "default": 6
-      },
-      "generate_audio": {
-        "type": "boolean",
-        "title": "Generate Audio",
-        "name": "generate_audio",
-        "description": "Whether to generate audio.",
-        "default": true
-      }
-    },
-    "provider": "lightricks",
-    "provider_name": "Lightricks"
   },
   {
     "id": "ltx-2-fast-image-to-video",
@@ -13026,37 +13308,6 @@ export const i2vModels = [
     },
     "provider": "vidu",
     "provider_name": "Vidu"
-  },
-  {
-    "id": "minimax-hailuo-2.3-pro-i2v",
-    "name": "Minimax Hailuo 2.3 Pro I2V",
-    "endpoint": "minimax-hailuo-2.3-pro-i2v",
-    "family": "minimax-2.3",
-    "imageField": "image_url",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "Text prompt describing the video.",
-        "examples": [
-          "The camera slowly moves around the woman as the wind gently sways the tall grass. Her hair flows with the breeze, sunlight flickering through passing clouds. The atmosphere feels calm, nostalgic, and cinematic."
-        ]
-      },
-      "resolution": {
-        "type": "string",
-        "title": "Resolution",
-        "name": "resolution",
-        "description": "The resolution of the generated video.",
-        "enum": [
-          "1080p"
-        ],
-        "default": "1080p"
-      }
-    },
-    "provider": "minimax",
-    "provider_name": "Minimax"
   },
   {
     "id": "minimax-hailuo-2.3-standard-i2v",
@@ -13303,45 +13554,6 @@ export const i2vModels = [
     "provider_name": "Kling AI"
   },
   {
-    "id": "kling-v2.6-pro-i2v",
-    "name": "Kling v2.6 Pro I2V",
-    "endpoint": "kling-v2.6-pro-i2v",
-    "family": "kling-v2.6",
-    "imageField": "image_url",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "The prompt to generate the video",
-        "examples": [
-          "Slow cinematic orbit around the floating obsidian throne, holographic runes pulsing gently, drifting quartz shards rotating with soft parallax, molten crystal canyon glowing brighter with movement, and subtle particle storms rising toward the cosmic vortex; maintain original lighting, style, and atmosphere."
-        ]
-      },
-      "duration": {
-        "type": "int",
-        "title": "Duration",
-        "name": "duration",
-        "description": "The duration of the generated video in seconds.",
-        "enum": [
-          5,
-          10
-        ],
-        "default": 5
-      },
-      "sound": {
-        "type": "boolean",
-        "title": "Sound",
-        "name": "sound",
-        "description": "Whether sound is generated simultaneously when generating a video.",
-        "default": true
-      }
-    },
-    "provider": "kling",
-    "provider_name": "Kling AI"
-  },
-  {
     "id": "pixverse-v5.5-i2v",
     "name": "Pixverse v5.5 I2V",
     "endpoint": "pixverse-v5.5-i2v",
@@ -13481,61 +13693,6 @@ export const i2vModels = [
           8
         ],
         "default": 5
-      }
-    },
-    "provider": "alibaba",
-    "provider_name": "Alibaba"
-  },
-  {
-    "id": "wan2.6-image-to-video",
-    "name": "Wan2.6 Image To Video",
-    "endpoint": "wan2.6-image-to-video",
-    "family": "wan2.6",
-    "imageField": "image_url",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt",
-        "description": "The prompt to generate the video",
-        "examples": [
-          "Add slow cinematic camera movement circling the floating lighthouse, orbiting symbol rings rotating gently with parallax depth, ocean waves shimmering and moving naturally, clouds drifting and lightning flashing subtly in the distance, and the lighthouse beam pulsing softly while preserving the original lighting and dramatic mood."
-        ]
-      },
-      "resolution": {
-        "type": "string",
-        "title": "Resolution",
-        "name": "resolution",
-        "description": "The resolution of the generated video.",
-        "enum": [
-          "720p",
-          "1080p"
-        ],
-        "default": "720p"
-      },
-      "duration": {
-        "type": "int",
-        "title": "Duration",
-        "name": "duration",
-        "description": "The duration of the generated video in seconds",
-        "enum": [
-          5,
-          10,
-          15
-        ],
-        "default": 5
-      },
-      "shot_type": {
-        "type": "string",
-        "title": "Shot Type",
-        "name": "shot_type",
-        "description": "The type of shot to generate.",
-        "enum": [
-          "single",
-          "multi"
-        ],
-        "default": "single"
       }
     },
     "provider": "alibaba",
@@ -14116,71 +14273,6 @@ export const i2vModels = [
           "high",
           "basic"
         ],
-        "default": "basic"
-      }
-    },
-    "provider": "bytedance",
-    "provider_name": "ByteDance"
-  }
-,
-  {
-    "id": "seedance-2-i2v",
-    "name": "Seedance 2 I2V",
-    "endpoint": "seedance-v2.0-i2v",
-    "family": "sd-v2.0",
-    "imageField": "images_list",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "examples": [
-          "The lightbulb suddenly rockets across the room like a missile, smashing through curtains while water spins violently inside. The fish darts through swirling currents as the bulb ricochets off walls and finally bursts into floating droplets."
-        ],
-        "type": "string",
-        "title": "Prompt",
-        "description": "Text prompt describing the video animation. Reference uploaded images using @image1, @image2, … @imageN (1-based, matching images_list order). To use a fictional character, reference it with @character:<id> (request_id from a completed Seedance 2 Character generation) — characters are automatically appended to images_list. Multiple characters are supported. Example: '@character:ab539e5f walks through a garden' or 'The cat in @image1 meets @character:ab539e5f'."
-      },
-      "images_list": {
-        "examples": [
-          "https://d3adwkbyhxyrtq.cloudfront.net/webassets/videomodels/seedance-v2.0-i2v.jpg"
-        ],
-        "description": "Upload up to 9 image URLs. Reference them in the prompt using @image1, @image2, … @image9. The aspect ratio of the reference image takes precedence over the aspect_ratio parameter.",
-        "field": "images_list",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "title": "Image URLs",
-        "name": "images_list",
-        "maxItems": 9
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16",
-          "4:3",
-          "3:4"
-        ],
-        "title": "Aspect Ratio",
-        "type": "string",
-        "default": "16:9"
-      },
-      "duration": {
-        "enum": [
-          5,
-          10,
-          15
-        ],
-        "title": "Duration",
-        "type": "integer",
-        "default": 5
-      },
-      "quality": {
-        "enum": [
-          "high",
-          "basic"
-        ],
-        "title": "Quality",
-        "type": "string",
         "default": "basic"
       }
     },
@@ -17492,100 +17584,6 @@ export const i2vModels = [
     "provider_name": "ByteDance"
   },
   {
-    "id": "seedance-2.5-image-to-video",
-    "name": "Seedance 2.5",
-    "endpoint": "seedance-2.5-image-to-video",
-    "family": "seedance-2.5",
-    "imageField": "image_url",
-    "lastImageField": "last_image",
-    "hasPrompt": true,
-    "inputs": {
-      "prompt": {
-        "examples": [
-          "Cinematic slow dolly forward through a surreal neon cityscape at night, rain-slicked streets reflecting towers of light, shallow depth of field, photorealistic 4K quality."
-        ],
-        "description": "Text prompt describing the video motion and style.",
-        "type": "string",
-        "title": "Prompt",
-        "name": "prompt"
-      },
-      "image_url": {
-        "examples": [
-          "https://d3adwkbyhxyrtq.cloudfront.net/webassets/videomodels/seedance-v1.5-pro-i2v.jpg"
-        ],
-        "description": "URL of the input image to animate into video.",
-        "field": "image",
-        "type": "string",
-        "title": "Image URL",
-        "name": "image_url"
-      },
-      "last_image": {
-        "examples": [
-          null
-        ],
-        "description": "Optional URL of the last frame image for first-last frame control.",
-        "field": "image",
-        "type": "string",
-        "title": "Last Image",
-        "name": "last_image"
-      },
-      "aspect_ratio": {
-        "enum": [
-          "16:9",
-          "9:16",
-          "1:1",
-          "3:4",
-          "4:3",
-          "21:9"
-        ],
-        "title": "Aspect Ratio",
-        "name": "aspect_ratio",
-        "type": "string",
-        "description": "Aspect ratio of the output video.",
-        "default": "16:9"
-      },
-      "resolution": {
-        "enum": [
-          "480p",
-          "720p",
-          "1080p",
-          "4K"
-        ],
-        "title": "Resolution",
-        "name": "resolution",
-        "type": "string",
-        "description": "Output video resolution.",
-        "default": "1080p"
-      },
-      "duration": {
-        "title": "Duration",
-        "name": "duration",
-        "type": "int",
-        "description": "The duration of the generated video in seconds.",
-        "default": 5,
-        "minValue": 4,
-        "maxValue": 16,
-        "step": 1
-      },
-      "generate_audio": {
-        "type": "boolean",
-        "title": "Generate Audio",
-        "name": "generate_audio",
-        "description": "Whether to generate audio for the video.",
-        "default": true
-      },
-      "camera_fixed": {
-        "type": "boolean",
-        "title": "Camera Fixed",
-        "name": "camera_fixed",
-        "description": "Whether to fix the camera position.",
-        "default": false
-      }
-    },
-    "provider": "bytedance",
-    "provider_name": "ByteDance"
-  },
-  {
     "id": "seedance-2-mini-image-to-video",
     "name": "Seedance 2 Mini",
     "endpoint": "seedance-2-mini-image-to-video",
@@ -19265,7 +19263,7 @@ export const audioModels = [
     "name": "Suno Create Music",
     "endpoint": "suno-create-music",
     "family": "suno",
-    "description": "Suno generate music that turns text prompts into full songs ΓÇö complete with vocals, lyrics, and instrumentation. You can describe a mood, genre, or even a specific lyric idea, and Suno creates a realistic, studio-quality track in seconds.",
+    "description": "Suno generate music that turns text prompts into full songs — complete with vocals, lyrics, and instrumentation. You can describe a mood, genre, or even a specific lyric idea, and Suno creates a realistic, studio-quality track in seconds.",
     "required": [
       "style"
     ],
@@ -19369,7 +19367,7 @@ export const audioModels = [
         "title": "Style Weight",
         "name": "style_weight",
         "type": "int",
-        "description": "Strength of adherence to the specified style (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Strength of adherence to the specified style (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19379,7 +19377,7 @@ export const audioModels = [
         "title": "Weirdness Constraint",
         "name": "weirdness_constraint",
         "type": "int",
-        "description": "Controls experimental/creative deviation (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Controls experimental/creative deviation (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19389,7 +19387,7 @@ export const audioModels = [
         "title": "Audio Weight",
         "name": "audio_weight",
         "type": "int",
-        "description": "Balance weight for audio features vs. other factors (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Balance weight for audio features vs. other factors (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19517,7 +19515,7 @@ export const audioModels = [
         "title": "Style Weight",
         "name": "style_weight",
         "type": "int",
-        "description": "Strength of adherence to the specified style (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Strength of adherence to the specified style (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19527,7 +19525,7 @@ export const audioModels = [
         "title": "Weirdness Constraint",
         "name": "weirdness_constraint",
         "type": "int",
-        "description": "Controls experimental/creative deviation (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Controls experimental/creative deviation (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19537,7 +19535,7 @@ export const audioModels = [
         "title": "Audio Weight",
         "name": "audio_weight",
         "type": "int",
-        "description": "Balance weight for audio features vs. other factors (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Balance weight for audio features vs. other factors (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19676,7 +19674,7 @@ export const audioModels = [
         "title": "Style Weight",
         "name": "style_weight",
         "type": "int",
-        "description": "Strength of adherence to the specified style (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Strength of adherence to the specified style (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19686,7 +19684,7 @@ export const audioModels = [
         "title": "Weirdness Constraint",
         "name": "weirdness_constraint",
         "type": "int",
-        "description": "Controls experimental/creative deviation (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Controls experimental/creative deviation (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -19696,7 +19694,7 @@ export const audioModels = [
         "title": "Audio Weight",
         "name": "audio_weight",
         "type": "int",
-        "description": "Balance weight for audio features vs. other factors (optional). Range 0ΓÇô1, up to 2 decimal places.",
+        "description": "Balance weight for audio features vs. other factors (optional). Range 0–1, up to 2 decimal places.",
         "minValue": 0,
         "maxValue": 1,
         "step": 0.05,
@@ -20187,7 +20185,7 @@ export const audioModels = [
     "name": "Minimax Voice Clone",
     "endpoint": "minimax-voice-clone",
     "family": "minimax-2.3",
-    "description": "Minimax Voice Clone creates a high-fidelity digital clone of a speakerΓÇÖs voice from a short reference audio sample. It reproduces the speakerΓÇÖs tone, emotion, accent, rhythm, and speaking style, then generates new speech from any text input.",
+    "description": "Minimax Voice Clone creates a high-fidelity digital clone of a speaker’s voice from a short reference audio sample. It reproduces the speaker’s tone, emotion, accent, rhythm, and speaking style, then generates new speech from any text input.",
     "required": [
       "audio_url",
       "custom_voice_id"
@@ -20269,7 +20267,7 @@ export const audioModels = [
     "name": "Minimax Speech HD",
     "endpoint": "minimax-speech-2.6-hd",
     "family": "minimax-2.6",
-    "description": "Speech-2.6-hd is MinimaxΓÇÖs high-definition text-to-speech model that turns written text into natural, human-like audio. It produces studio-quality speech with clear pronunciation, smooth pacing, realistic emotion, and no background noise.",
+    "description": "Speech-2.6-hd is Minimax’s high-definition text-to-speech model that turns written text into natural, human-like audio. It produces studio-quality speech with clear pronunciation, smooth pacing, realistic emotion, and no background noise.",
     "required": [
       "prompt",
       "voice_id"
@@ -20928,7 +20926,7 @@ export const audioModels = [
     "name": "Minimax Speech Turbo",
     "endpoint": "minimax-speech-2.6-turbo",
     "family": "minimax-2.6",
-    "description": "Speech-2.6-turbo is MinimaxΓÇÖs fast, lightweight text-to-speech model designed for quick audio generation while maintaining good natural voice quality. It produces clear speech with smooth pacing and minimal delay.",
+    "description": "Speech-2.6-turbo is Minimax’s fast, lightweight text-to-speech model designed for quick audio generation while maintaining good natural voice quality. It produces clear speech with smooth pacing and minimal delay.",
     "required": [
       "prompt",
       "voice_id"

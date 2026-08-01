@@ -13,6 +13,9 @@ RUN npm install
 # Build sub-packages
 FROM deps AS builder
 COPY . .
+# The generated model catalog (packages/studio/src/models.js, ~22k lines) blows
+# the default V8 heap during `next build`; without this the build OOM-crashes.
+ENV NODE_OPTIONS=--max-old-space-size=8192
 RUN npm run build:packages
 RUN npm run build
 

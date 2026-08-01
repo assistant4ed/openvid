@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ImageStudio, VideoStudio, ClippingStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, getUserBalance } from 'studio';
+import { WorkspaceStudio, ImageStudio, VideoStudio, ClippingStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, getUserBalance } from 'studio';
 
 const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignAgentStudio), {
   ssr: false,
@@ -11,8 +11,21 @@ const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignA
 });
 import axios from 'axios';
 import ApiKeyModal from './ApiKeyModal';
+import KeyManager from './KeyManager';
+import AccountCard from './AccountCard';
+import Link from 'next/link';
 
 const TABS = [
+  {
+    id: 'workspace',
+    label: 'Workspace',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 9h18M9 21V9"/>
+      </svg>
+    )
+  },
   {
     id: 'image',
     label: 'Image Studio',
@@ -180,6 +193,17 @@ const TABS = [
 
 const NAVIGATION_CATEGORIES = [
   {
+    id: 'create',
+    label: 'Workspace',
+    tabIds: ['workspace'],
+    icon: (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 9h18M9 21V9"/>
+      </svg>
+    )
+  },
+  {
     id: 'images',
     label: 'Images',
     tabIds: ['image', 'cinema', 'design-agent', 'ai-influencer'],
@@ -237,7 +261,17 @@ const getNavigationCategory = (tabId) => (
   NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId))
 );
 
+
+// Studios whose models have no enabled backend on a SuperbAPI-only session —
+// they render their UI, but Generate would fail. One honest banner beats nine
+// cryptic errors. (Workspace/Image/Video/Cinema/Design Agent are fully live.)
+const BACKENDLESS_TABS = new Set([
+  'lipsync', 'audio', 'clipping', 'body-swap', 'marketing', 'vibe-motion',
+  'ai-influencer', 'workflows', 'agents', 'apps',
+]);
+
 const STORAGE_KEY = 'muapi_key';
+const SUPERB_STORAGE_KEY = 'superbapi_key';
 const NOTIFICATIONS_STORAGE_KEY = 'open_gen_notifications_v1';
 const MAX_VISIBLE_NOTIFICATIONS = 3;
 
@@ -301,17 +335,15 @@ export default function StandaloneShell() {
     return 'image';
   };
   
-  const [apiKey, setApiKey] = useState(null);
+  const [apiKey, setApiKey] = useState(null); // optional MuAPI render key
+  const [superbKey, setSuperbKey] = useState(null); // the session — SuperbAPI
+  const [superbCredits, setSuperbCredits] = useState(null);
   const [activeTab, setActiveTab] = useState(getInitialTab());
 
   const [balance, setBalance] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
-  const [showVadooBanner, setShowVadooBanner] = useState(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem('vadoo_banner_dismissed') !== '1';
-    return true;
-  });
 
   // Sidebar Collapsed & Mobile Drawer State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -525,8 +557,50 @@ export default function StandaloneShell() {
     }
   }, []);
 
+  // Probe which render models this key can actually run and cache for the
+  // studios — pickers must only ever offer what will succeed.
+  const fetchSuperbCapabilities = useCallback(async (key) => {
+    try {
+      const response = await fetch('/api/superb-capabilities', {
+        headers: { 'x-superb-key': key },
+      });
+      if (!response.ok) return;
+      const caps = await response.json();
+      localStorage.setItem('superb_caps_v1', JSON.stringify(caps));
+      window.dispatchEvent(new CustomEvent('superb:caps', { detail: caps }));
+    } catch (err) {
+      console.warn('Capability probe failed:', err?.message);
+    }
+  }, []);
+
+  const fetchSuperbCredits = useCallback(async (key) => {
+    try {
+      const response = await fetch('/api/superb/credits', {
+        headers: { 'x-superb-key': key },
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      const data = payload?.data;
+      if (data && typeof data.total_credits === 'number') {
+        setSuperbCredits(Math.max(0, data.total_credits - (data.total_usage || 0)));
+      }
+    } catch (err) {
+      console.warn('SuperbAPI credits fetch failed:', err?.message);
+    }
+  }, []);
+
   useEffect(() => {
     setHasMounted(true);
+
+    // Session key (SuperbAPI) — required to enter the studio.
+    const storedSuperb = localStorage.getItem(SUPERB_STORAGE_KEY);
+    if (storedSuperb) {
+      setSuperbKey(storedSuperb);
+      fetchSuperbCredits(storedSuperb);
+      fetchSuperbCapabilities(storedSuperb);
+    }
+
+    // Render key (MuAPI) — optional; only needed for cloud generation.
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       setApiKey(stored);
@@ -534,7 +608,22 @@ export default function StandaloneShell() {
       // Sync cookie immediately on mount to establish identity for background requests
       document.cookie = `muapi_key=${stored}; path=/; max-age=31536000; SameSite=Lax`;
     }
-  }, [fetchBalance]);
+  }, [fetchBalance, fetchSuperbCredits, fetchSuperbCapabilities]);
+
+  const handleSuperbSave = useCallback((key) => {
+    localStorage.setItem(SUPERB_STORAGE_KEY, key);
+    setSuperbKey(key);
+    fetchSuperbCredits(key);
+    fetchSuperbCapabilities(key);
+  }, [fetchSuperbCredits, fetchSuperbCapabilities]);
+
+  const handleSuperbSignOut = useCallback(() => {
+    localStorage.removeItem(SUPERB_STORAGE_KEY);
+    localStorage.removeItem('superbapi_keys_v1');
+    localStorage.removeItem('superb_caps_v1');
+    setSuperbKey(null);
+    setSuperbCredits(null);
+  }, []);
 
   const handleKeySave = useCallback((key) => {
     localStorage.setItem(STORAGE_KEY, key);
@@ -549,6 +638,34 @@ export default function StandaloneShell() {
     setBalance(null);
     document.cookie = "muapi_key=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
   }, []);
+
+  // NOTE: an earlier build auto-opened Settings on every render-auth failure —
+  // with a valid SuperbAPI session already set, that just nagged the user with
+  // a modal they couldn't fix anything in. Failures surface as toasts instead.
+
+  // Studio components report errors here instead of window.alert() — they land
+  // in the slate notification stack.
+  useEffect(() => {
+    window.__studioNotifyMounted = true;
+    const handleStudioNotify = (event) => {
+      pushNotification({
+        type: event.detail?.kind === 'info' ? 'success' : 'error',
+        tabId: activeTab,
+        label: TABS.find((tab) => tab.id === activeTab)?.label || 'Studio',
+        message: event.detail?.message || 'Something went wrong',
+      });
+    };
+    window.addEventListener('studio:notify', handleStudioNotify);
+    // Studios can deep-link into Settings (e.g. the task board's "sign in to
+    // keep history" hint) without knowing anything about the shell.
+    const handleOpenSettings = () => setShowSettings(true);
+    window.addEventListener('studio:open-settings', handleOpenSettings);
+    return () => {
+      window.__studioNotifyMounted = false;
+      window.removeEventListener('studio:notify', handleStudioNotify);
+      window.removeEventListener('studio:open-settings', handleOpenSettings);
+    };
+  }, [pushNotification, activeTab]);
 
   // Inject API key into all outgoing Axios requests (prop-based approach)
   // We use an interceptor to be selective and NOT send the key to external domains like S3
@@ -621,12 +738,14 @@ export default function StandaloneShell() {
 
   if (!hasMounted) return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-      <div className="animate-spin text-[#22d3ee] text-3xl">◌</div>
+      <div className="animate-spin text-[#d4f939] text-3xl">◌</div>
     </div>
   );
 
-  if (!apiKey) {
-    return <ApiKeyModal onSave={handleKeySave} />;
+  // The SuperbAPI key is the session. The MuAPI render key is optional and
+  // managed in Settings — studios prompt for it when a render needs it.
+  if (!superbKey) {
+    return <ApiKeyModal onSave={handleSuperbSave} />;
   }
 
   return (
@@ -639,9 +758,9 @@ export default function StandaloneShell() {
     >
       {/* Drag Overlay */}
       {isDragging && (
-        <div className="fixed inset-0 z-[100] bg-[#22d3ee]/10 backdrop-blur-md border-4 border-dashed border-[#22d3ee]/50 flex items-center justify-center pointer-events-none transition-all duration-300">
+        <div className="fixed inset-0 z-[100] bg-[#d4f939]/10 backdrop-blur-md border-4 border-dashed border-[#d4f939]/50 flex items-center justify-center pointer-events-none transition-all duration-300">
           <div className="bg-[#0a0a0a] p-8 rounded-3xl border border-white/10 shadow-2xl flex flex-col items-center gap-4 scale-110 animate-pulse">
-            <div className="w-20 h-20 bg-[#22d3ee] rounded-2xl flex items-center justify-center">
+            <div className="w-20 h-20 bg-[#d4f939] rounded-2xl flex items-center justify-center">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
               </svg>
@@ -651,30 +770,6 @@ export default function StandaloneShell() {
               <span className="text-sm text-white/40">Images, videos, or audio files</span>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Vadoo promo banner */}
-      {showVadooBanner && (
-        <div className="flex-shrink-0 w-full bg-indigo-600 flex items-center justify-center px-4 py-2 gap-3 relative z-50">
-          <a
-            href="https://vadoo.tv"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[13px] font-bold text-white hover:opacity-80 transition-opacity text-center"
-          >
-            Unrestricted AI Images &amp; Videos → Auto-Publish as YouTube Shorts &amp; TikToks, Earn ↗
-          </a>
-          <button
-            onClick={() => {
-              setShowVadooBanner(false);
-              localStorage.setItem('vadoo_banner_dismissed', '1');
-            }}
-            className="absolute right-3 text-white/60 hover:text-white transition-colors text-lg leading-none"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
         </div>
       )}
 
@@ -723,22 +818,22 @@ export default function StandaloneShell() {
               </div>
             </div>
 
-            {/* Logo & Title */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-[#22d3ee] rounded-lg flex items-center justify-center shadow-lg shadow-[#22d3ee]/20">
+            {/* Logo & Title — links home */}
+            <Link href="/" className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-[#d4f939] rounded-lg flex items-center justify-center shadow-lg shadow-[#d4f939]/20">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
               </div>
               <span className="text-sm font-bold tracking-tight hidden sm:block text-white">
-                OpenGenerativeAI
+                OpenVid Studio
               </span>
-            </div>
+            </Link>
           </div>
 
           {/* Active Tab Breadcrumb Badge */}
           <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.05] text-xs text-white/60">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22d3ee]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#d4f939]" />
             <span className="font-medium text-white/80">
               {TABS.find(t => t.id === activeTab)?.label || 'Studio'}
             </span>
@@ -746,12 +841,18 @@ export default function StandaloneShell() {
 
           {/* Right: Actions */}
           <div className="flex-shrink-0 flex items-center gap-3">
-            <div className="flex items-center gap-2.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-bold text-white/90">
-                ${balance !== null ? `${balance}` : '---'}
+            {/* SuperbAPI session credits — the slate readout */}
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              title="SuperbAPI credits remaining"
+              className="flex items-center gap-2.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 hover:border-[rgba(212,249,57,0.35)] transition-colors"
+            >
+              <span className="status-dot-ok" />
+              <span className="slate-value text-white/90">
+                {superbCredits !== null ? `${Math.round(superbCredits)} CR` : 'SUPERB'}
               </span>
-            </div>
+            </button>
 
             <button
               onClick={() => setShowSettings(true)}
@@ -808,7 +909,7 @@ export default function StandaloneShell() {
                           group relative flex items-center rounded-xl transition-all duration-150 font-semibold
                           ${isCollapsed ? 'h-11 w-11 justify-center mx-auto' : 'px-3 py-2.5 w-full gap-3 text-left'}
                           ${isCategoryActive
-                            ? 'bg-gradient-to-r from-[#22d3ee]/15 to-purple-500/10 text-[#22d3ee] border border-[#22d3ee]/20 shadow-[0_0_15px_rgba(34,211,238,0.08)]'
+                            ? 'bg-gradient-to-r from-[#d4f939]/15 to-purple-500/10 text-[#d4f939] border border-[#d4f939]/20 shadow-[0_0_15px_rgba(212,249,57,0.08)]'
                             : isCategoryOpen
                               ? 'bg-white/[0.06] text-white border border-white/[0.08]'
                               : 'text-white/60 hover:text-white hover:bg-white/[0.04] border border-transparent'
@@ -816,10 +917,10 @@ export default function StandaloneShell() {
                         `}
                       >
                         {isCategoryActive && (
-                          <span className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-[#22d3ee] to-[#a855f7] rounded-r-full shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+                          <span className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-[#d4f939] to-[#a855f7] rounded-r-full shadow-[0_0_8px_rgba(212,249,57,0.6)]" />
                         )}
 
-                        <span className={`flex-shrink-0 transition-colors ${isCategoryActive ? 'text-[#22d3ee]' : 'text-white/55 group-hover:text-white'}`}>
+                        <span className={`flex-shrink-0 transition-colors ${isCategoryActive ? 'text-[#d4f939]' : 'text-white/55 group-hover:text-white'}`}>
                           {category.icon}
                         </span>
 
@@ -867,15 +968,15 @@ export default function StandaloneShell() {
                                 className={`
                                   group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12px] font-medium transition-all duration-150
                                   ${isActive
-                                    ? 'bg-[#22d3ee]/12 text-[#22d3ee] border border-[#22d3ee]/20'
+                                    ? 'bg-[#d4f939]/12 text-[#d4f939] border border-[#d4f939]/20'
                                     : 'text-white/55 hover:text-white hover:bg-white/[0.04] border border-transparent'
                                   }
                                 `}
                               >
                                 {isActive && (
-                                  <span className="absolute -left-[11px] top-2 bottom-2 w-0.5 rounded-full bg-[#22d3ee] shadow-[0_0_7px_rgba(34,211,238,0.7)]" />
+                                  <span className="absolute -left-[11px] top-2 bottom-2 w-0.5 rounded-full bg-[#d4f939] shadow-[0_0_7px_rgba(212,249,57,0.7)]" />
                                 )}
-                                <span className={`flex-shrink-0 ${isActive ? 'text-[#22d3ee]' : 'text-white/45 group-hover:text-white/80'}`}>
+                                <span className={`flex-shrink-0 ${isActive ? 'text-[#d4f939]' : 'text-white/45 group-hover:text-white/80'}`}>
                                   {tab.icon}
                                 </span>
                                 <span className="truncate">{tab.label}</span>
@@ -901,15 +1002,15 @@ export default function StandaloneShell() {
                       group relative flex items-center rounded-xl transition-all duration-150 text-[13px] font-semibold
                       ${isSidebarCollapsed && !isMobileOpen ? 'h-11 w-11 justify-center mx-auto' : 'px-3 py-2.5 w-full gap-3'}
                       ${activeTab === EXPLORE_APPS_TAB.id
-                        ? 'bg-gradient-to-r from-[#22d3ee]/15 to-purple-500/10 text-[#22d3ee] border border-[#22d3ee]/20'
+                        ? 'bg-gradient-to-r from-[#d4f939]/15 to-purple-500/10 text-[#d4f939] border border-[#d4f939]/20'
                         : 'text-white/60 hover:text-white hover:bg-white/[0.04] border border-transparent'
                       }
                     `}
                   >
                     {activeTab === EXPLORE_APPS_TAB.id && (
-                      <span className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-[#22d3ee] to-[#a855f7] rounded-r-full" />
+                      <span className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-[#d4f939] to-[#a855f7] rounded-r-full" />
                     )}
-                    <span className={`flex-shrink-0 ${activeTab === EXPLORE_APPS_TAB.id ? 'text-[#22d3ee]' : 'text-white/50 group-hover:text-white'}`}>
+                    <span className={`flex-shrink-0 ${activeTab === EXPLORE_APPS_TAB.id ? 'text-[#d4f939]' : 'text-white/50 group-hover:text-white'}`}>
                       {EXPLORE_APPS_TAB.icon}
                     </span>
                     {(!isSidebarCollapsed || isMobileOpen) && (
@@ -924,6 +1025,18 @@ export default function StandaloneShell() {
 
         {/* Studio Content */}
         <div className="flex-1 min-h-0 h-full relative overflow-hidden bg-[#030303]">
+        {BACKENDLESS_TABS.has(activeTab) && (
+          <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-center gap-3 border-b border-[rgba(245,158,11,0.3)] bg-[#1a1206]/95 px-4 py-2 backdrop-blur-md">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-rec" />
+            <p className="font-slate text-[10px] uppercase tracking-[0.14em] text-white/70">
+              This studio&apos;s models aren&apos;t enabled on your key yet — renders will fail.
+              <span className="text-primary"> Workspace, Image, Video, Cinema &amp; Camera Path are fully live.</span>
+            </p>
+          </div>
+        )}
+        <div className={activeTab === 'workspace' ? "h-full w-full" : "hidden"}>
+          <WorkspaceStudio apiKey={apiKey} />
+        </div>
         <div className={activeTab === 'image' ? "h-full w-full" : "hidden"}>
           <ImageStudio apiKey={apiKey} droppedFiles={droppedFiles} onFilesHandled={handleFilesHandled} onGenerationStart={makeGenerationStartCallback('image')} onGenerationEnd={makeGenerationEndCallback('image')} onGenerationComplete={makeSuccessCallback('image')} onGenerationError={makeErrorCallback('image')} />
         </div>
@@ -1006,12 +1119,12 @@ export default function StandaloneShell() {
               key={generation.tabId}
               role="status"
               data-generation-tab={generation.tabId}
-              className="pointer-events-auto flex items-center gap-3 rounded-xl border border-cyan-500/40 bg-white px-3.5 py-3 text-[13px] text-zinc-900 shadow-[0_10px_30px_rgba(0,0,0,0.15)]"
+              className="pointer-events-auto flex items-center gap-3 rounded-xl border border-primary/40 bg-white px-3.5 py-3 text-[13px] text-zinc-900 shadow-[0_10px_30px_rgba(0,0,0,0.15)]"
               data-testid="generation-activity"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-50">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-primary">
                 <span
-                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-600/30 border-t-cyan-600"
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-cyan-600"
                   aria-hidden="true"
                 />
               </span>
@@ -1037,7 +1150,7 @@ export default function StandaloneShell() {
               <span
                 className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
                   notif.type === 'success'
-                    ? 'border-cyan-400/40 bg-cyan-50 text-cyan-600'
+                    ? 'border-primary/40 bg-primary text-primary'
                     : 'border-red-400/40 bg-red-50 text-red-600'
                 }`}
               >
@@ -1075,7 +1188,7 @@ export default function StandaloneShell() {
                   <button
                     type="button"
                     onClick={() => handleOpenNotification(notif)}
-                    className="mt-1.5 text-[11px] font-bold text-cyan-600 transition-colors hover:text-cyan-700"
+                    className="mt-1.5 text-[11px] font-bold text-primary transition-colors hover:text-primary"
                     aria-label={`Open ${notif.label} result`}
                   >
                     Open →
@@ -1115,41 +1228,56 @@ export default function StandaloneShell() {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in-up">
-          <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-8 w-full max-w-sm shadow-2xl">
-            <h2 className="text-white font-bold text-lg mb-2">Settings</h2>
-            <p className="text-white/40 text-[13px] mb-8">
-              Manage your AI studio preferences and authentication.
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="panel-pop w-full max-w-md p-8 animate-scale-up">
+            <p className="slate-label slate-label--cyan mb-2">PRODUCTION OFFICE</p>
+            <h2 className="display-3 text-white mb-1">Settings</h2>
+            <p className="text-white/40 text-[13px] mb-7">
+              One key runs the studio — your SuperbAPI session signs you in and
+              pays for generation.
             </p>
-            
-            <div className="space-y-4 mb-8">
-              <div className="bg-white/5 border border-white/[0.03] rounded-md p-4">
-                <label className="block text-xs font-bold text-white/30 mb-2">
-                   Active API Key
-                </label>
-                <div className="text-[13px] font-mono text-white/80">
-                  {apiKey.slice(0, 8)}••••••••••••••••
-                </div>
+
+            <div className="space-y-4 mb-7">
+              <AccountCard />
+              {/* SuperbAPI keys — ranked; #1 is the session */}
+              <KeyManager
+                onActiveChange={(key) => {
+                  setSuperbKey(key);
+                  fetchSuperbCredits(key);
+                }}
+                onSignOut={() => {
+                  handleSuperbSignOut();
+                  setShowSettings(false);
+                }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { handleSuperbSignOut(); setShowSettings(false); }}
+                  className="btn btn-md btn-ghost flex-1 !text-[12px]"
+                >
+                  Sign out
+                </button>
+                <a
+                  href="https://www.superbapi.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-md btn-outline-cyan !text-[12px]"
+                >
+                  Top up →
+                </a>
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={handleKeyChange}
-                className="flex-1 h-10 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-semibold transition-all"
-              >
-                Change Key
-              </button>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="flex-1 h-10 rounded-md bg-white/5 text-white/80 hover:bg-white/10 text-xs font-semibold transition-all border border-white/5"
-              >
-                Close
-              </button>
-            </div>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="btn btn-md btn-primary w-full"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 }
+

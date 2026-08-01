@@ -1,0 +1,28 @@
+# Keep the deploy upload small — Railway's upload limit is well under the size
+# of the local .git (111 MB) and build output. None of this is needed to build
+# the image; the Dockerfile installs and builds from source.
+.git
+.git/**
+**/.git
+node_modules
+node_modules.nosync
+**/node_modules
+.next
+.next.nosync
+**/.next
+dist
+**/dist
+release
+build/local-ai
+docs
+.vercel
+.claude
+
+# Marketing assets used only by the README
+thumbnail.png
+thumbnail-ai-v2-1920x1080.png
+
+# Local env — real values are set as Railway service variables
+.env
+.env.local
+.env.*.local

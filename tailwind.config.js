@@ -14,17 +14,32 @@ module.exports = {
         extend: {
             colors: {
                 primary: {
-                    DEFAULT: '#22d3ee',
-                    hover: '#06b6d4',
+                    DEFAULT: '#d4f939',
+                    hover: '#e4ff66',
+                    deep: '#a8c614',
+                    ink: '#151a02',
                 },
-                'app-bg': '#050505',
-                'panel-bg': '#0a0a0a',
-                'card-bg': '#141414',
+                rec: {
+                    DEFAULT: '#f59e0b',
+                    deep: '#b45309',
+                },
+                ink: {
+                    0: '#030304',
+                    1: '#08080a',
+                    2: '#0d0d10',
+                    3: '#121216',
+                    4: '#1a1a20',
+                },
+                'app-bg': '#030304',
+                'panel-bg': '#08080a',
+                'card-bg': '#121216',
                 secondary: '#a1a1aa',
                 muted: '#52525b',
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                sans: ['var(--font-body)', 'Inter', 'system-ui', 'sans-serif'],
+                display: ['var(--font-display)', 'Bricolage Grotesque', 'system-ui', 'sans-serif'],
+                slate: ['var(--font-mono)', 'JetBrains Mono', 'ui-monospace', 'monospace'],
             },
             borderRadius: {
                 'xl': '1rem',
@@ -32,10 +47,15 @@ module.exports = {
                 '3xl': '2rem',
             },
             boxShadow: {
-                'glow': '0 0 20px rgba(34, 211, 238, 0.4)',
+                'glow': '0 0 20px rgba(212, 249, 57, 0.4)',
                 'glow-accent': '0 0 20px rgba(168, 85, 247, 0.4)',
+                'cyan-whisper': '0 0 0 1px rgba(212, 249, 57, 0.18), 0 8px 30px rgba(212, 249, 57, 0.07)',
+                'panel': '0 24px 80px rgba(0, 0, 0, 0.7)',
                 '3xl': '0 35px 60px -15px rgba(0, 0, 0, 0.8)',
-            }
+            },
+            letterSpacing: {
+                'slate': '0.18em',
+            },
         },
     },
     plugins: [],
