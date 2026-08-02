@@ -292,9 +292,20 @@ export default function CameraPathOverlay({
   const cancelRef = useRef(false);
 
   const frameUrl = uploadedSource || imageUrl;
-  const capsVideo = caps?.video || [];
+  // Camera Path is by definition a move ON the user's frame — so the picker
+  // only offers models that can actually use the pixels, and defaults to one
+  // that starts on them exactly (frames: 'literal'). Offering Kling here was
+  // the root of "the camera move ignored my photo": it never sees the image,
+  // it only reads our description of it.
+  const capsVideoAll = caps?.video || [];
+  const capsVideo = capsVideoAll.filter((entry) => entry.frames !== "ignored" && entry.image !== false);
   const capsMode = capsVideo.length > 0;
-  const capsModel = capsVideo.find((entry) => entry.id === model) || capsVideo[0] || null;
+  const frameExactDefault = capsVideo.find((entry) => entry.frames === "literal") || capsVideo[0] || null;
+  const capsModel = capsVideo.find((entry) => entry.id === model) || frameExactDefault;
+  useEffect(() => {
+    if (capsMode && capsModel && model !== capsModel.id) setModel(capsModel.id);
+  }, [capsMode, capsModel, model]);
+
   const modelInfo = getCameraPathModel(model);
   const totals = useMemo(
     () => (capsMode ? capsModel?.durations || [5] : availableTotals(model)),
@@ -908,7 +919,7 @@ export default function CameraPathOverlay({
 
           {capsMode && capsModel && (
             <p className="mt-2 text-[11px] leading-relaxed text-white/35">
-              {capsModel.name} · verified on your key · {capsModel.durations.join("s / ")}s ·
+              {capsModel.name} · {capsModel.frames === "literal" ? "starts on your exact frame" : "frame guides the scene"} · {capsModel.durations.join("s / ")}s ·
               single continuous clip
             </p>
           )}

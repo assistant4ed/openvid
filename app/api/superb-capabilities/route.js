@@ -163,6 +163,21 @@ async function degradedModels() {
     }
 }
 
+// Plain-language capability chips for the pickers. Derived from the verified
+// facts above so the list can never drift from what the model actually does:
+// audio-capable models can carry music and a spoken voiceover (they generate
+// the soundtrack); no model on this gateway does video-to-video yet.
+function capabilityTags(model) {
+    const tags = [];
+    if (model.audio === true) tags.push('sound', 'music', 'voiceover');
+    if (model.audio === false) tags.push('silent');
+    if (model.frames === 'literal') tags.push('image → video (exact)');
+    else if (model.frames === 'described') tags.push('image → video (guided)');
+    else if (model.frames === 'ignored') tags.push('text only');
+    if (model.perSecond) tags.push('billed per second');
+    return tags;
+}
+
 export async function GET(request) {
     const apiKey = request.headers.get('x-superb-key');
     if (!apiKey || !apiKey.startsWith('sk-')) {
@@ -206,9 +221,11 @@ export async function GET(request) {
 
     const video = results
         .filter((entry) => entry.enabled)
-        .map((entry) => (degraded.has(entry.model.id)
-            ? { ...entry.model, degraded: true }
-            : entry.model))
+        .map((entry) => ({
+            ...entry.model,
+            capabilities: capabilityTags(entry.model),
+            ...(degraded.has(entry.model.id) ? { degraded: true } : {}),
+        }))
         // Recommended, healthy models lead the list; anything whose provider
         // is currently failing sinks to the bottom.
         .sort((a, b) => (Number(Boolean(b.recommended)) - Number(Boolean(a.recommended)))

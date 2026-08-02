@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  planPrompt,
   pollRenderJob,
   pollSuperbVideoTask,
   retryRenderJob,
@@ -184,6 +185,8 @@ export default function WorkspaceStudio({ apiKey }) {
   const [music, setMusic] = useState("");
   const [script, setScript] = useState("");
   const [previewTask, setPreviewTask] = useState(null);
+  const [plan, setPlan] = useState(null);      // { intent, questions, prompt }
+  const [planning, setPlanning] = useState(false);
   const [videoModel, setVideoModel] = useState("");
   const [duration, setDuration] = useState(5);
   const [aspect, setAspect] = useState("16:9");
@@ -449,6 +452,27 @@ export default function WorkspaceStudio({ apiKey }) {
   };
 
   const presetEntry = CAMERA_PATH_PRESETS.find((entry) => entry.id === preset);
+
+  // Ask the agent to think out loud first — free, and it catches the
+  // misunderstandings that otherwise only surface after a paid render.
+  const handlePlan = async () => {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
+      notifyError("Describe what you want first — then I can ask about the details.");
+      return;
+    }
+    setPlanning(true);
+    try {
+      const asVision = (value, role) =>
+        typeof value === "string" && value.startsWith("data:image/") ? { role, data: value } : null;
+      const images = [asVision(startFrame, "start"), asVision(refImage, "ref")].filter(Boolean);
+      setPlan(await planPrompt(trimmed, images));
+    } catch (error) {
+      notifyError(error?.message?.slice(0, 160) || "Could not plan this run.");
+    } finally {
+      setPlanning(false);
+    }
+  };
 
   const handleCreate = async () => {
     const trimmed = prompt.trim();
@@ -923,7 +947,19 @@ export default function WorkspaceStudio({ apiKey }) {
                                   className={blocked ? "opacity-40 !cursor-not-allowed" : ""}
                                   description={`${entry.durations.join("s / ")}s${entry.fixed ? " fixed" : ""}${entry.price ? ` · ${entry.price}` : ""}${textOnly ? " · text-only" : ""}${entry.frameExact ? " · frame-exact" : ""}`}
                                   onClick={() => { setVideoModel(entry.id); setOpenPopover(null); }}>
-                                  {entry.name}
+                                  <span className="flex flex-col items-start gap-1">
+                                    <span>{entry.name}</span>
+                                    {entry.capabilities?.length > 0 && (
+                                      <span className="flex flex-wrap gap-1">
+                                        {entry.capabilities.map((tag) => (
+                                          <span key={tag}
+                                            className="rounded border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-white/45">
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </span>
+                                    )}
+                                  </span>
                                 </PromptMenuItem>
                               );
                             })}
@@ -1108,6 +1144,84 @@ export default function WorkspaceStudio({ apiKey }) {
           </div>
         )}
       </div>
+
+      {plan && (
+        <div
+          className="fixed inset-0 z-[115] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setPlan(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Plan review"
+        >
+          <div
+            className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#0b0b0d] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/8 px-5 py-3">
+              <span className="font-slate text-[10px] uppercase tracking-wider text-[#d4f939]">
+                Before we spend anything
+              </span>
+              <button type="button" onClick={() => setPlan(null)} aria-label="Close plan"
+                className="rounded-lg border border-white/10 px-2 py-1 text-xs text-white/50 hover:border-white/30 hover:text-white">
+                ✕
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+              <div>
+                <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">What I understood</span>
+                <p className="mt-1 text-sm leading-relaxed text-white/80">{plan.intent}</p>
+              </div>
+
+              {plan.questions.length > 0 && (
+                <div>
+                  <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">
+                    Choices I made — change any before generating
+                  </span>
+                  <ul className="mt-2 space-y-2.5">
+                    {plan.questions.map((item, index) => (
+                      <li key={index} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                        <p className="text-xs font-semibold text-white/80">{item.q}</p>
+                        {item.why && <p className="mt-0.5 text-[11px] text-white/40">{item.why}</p>}
+                        <p className="mt-1.5 text-xs text-[#d4f939]">→ {item.suggestion}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div>
+                <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">The brief it will render</span>
+                <p className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-white/8 bg-black/40 px-3 py-2.5 text-[11px] leading-relaxed text-white/55">
+                  {plan.prompt}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-white/8 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => { setPrompt(plan.prompt); setPlan(null); notifyInfo("Brief applied — edit it or hit Generate."); }}
+                className="rounded-lg border border-[rgba(212,249,57,0.35)] bg-[rgba(212,249,57,0.1)] px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-[#d4f939] hover:bg-[rgba(212,249,57,0.18)]"
+              >
+                Use this brief
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlan(null)}
+                className="rounded-lg border border-white/12 px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-white/60 hover:border-white/30 hover:text-white"
+              >
+                Keep my own wording
+              </button>
+              {estimatedCost && (
+                <span className="ml-auto font-slate text-[10px] uppercase tracking-wider text-white/35">
+                  generating will cost ≈ {estimatedCost}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewTask && (
         <div

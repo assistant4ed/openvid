@@ -364,6 +364,31 @@ export async function submitImageJob(params) {
     return pollRenderJob(jobId, superbKey);
 }
 
+// Planning pass: the agent states what it understood, asks what would change
+// the shot, and drafts the prompt — all BEFORE anything is charged.
+export async function planPrompt(prompt, images) {
+    const superbKey =
+        typeof window !== 'undefined' ? window.localStorage.getItem('superbapi_key') : null;
+    if (!superbKey) throw new Error('Sign in with your SuperbAPI key first.');
+    const response = await fetch('/api/prompt-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
+        body: JSON.stringify({
+            prompt,
+            mode: 'clarify',
+            images: (images || []).filter((entry) => entry?.data),
+        }),
+        signal: AbortSignal.timeout(90000),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || `Planning failed (${response.status})`);
+    return {
+        intent: data.intent || '',
+        questions: Array.isArray(data.questions) ? data.questions : [],
+        prompt: data.expandedPrompt || prompt,
+    };
+}
+
 // Retry a failed job — the server clones the stored spec, frames included.
 export async function retryRenderJob(jobId) {
     const superbKey =

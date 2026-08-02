@@ -25,6 +25,7 @@ const requestCounts = new Map();
 // The prompt templates — one per generation mode. Each tells the agent what
 // a complete prompt for that mode must specify.
 const MODE_TEMPLATES = {
+
     t2i: `Text-to-image. Expand the request into ONE production prompt.
 Write RICH, SPECIFIC production detail — target 200-260 words. Thin
 prompts are the #1 cause of generic output, so spend words on: exact subject
@@ -117,6 +118,19 @@ Carry any STYLE/SUBJECT REFERENCE looks into the scene. Present tense, single
 continuous shot, no cuts.`,
 };
 
+const CLARIFY_TEMPLATE = `Planning pass — NOTHING is generated from this yet.
+The user gave a short brief and wants to check your understanding first.
+Reply with STRICT JSON only:
+{"intent":"one plain sentence naming what they want",
+ "questions":[{"q":"a specific question whose answer would change the shot",
+               "why":"what it affects","suggestion":"the choice you would make"}],
+ "prompt":"the full production prompt you would run if they accept your suggestions"}
+Ask 2-4 questions, never generic ones — they must be about THIS brief
+(e.g. the subject's wardrobe, the time of day, whether the camera moves, who
+speaks). Each suggestion must be concrete enough to use as-is. The prompt
+field follows the same rules as a normal production prompt: rich, specific,
+one flowing paragraph, 200-260 words.`;
+
 const DESCRIBE_SYSTEM =
     'You are the eyes of a film studio. Describe the attached image with ' +
     'precision: subjects, their colors, clothing/materials, layout and ' +
@@ -179,6 +193,15 @@ function parseAgentReply(raw) {
             ? {
                   expandedPrompt: String(parsed.prompt).slice(0, 1200),
                   intent: String(parsed.intent || '').slice(0, 200),
+                  ...(Array.isArray(parsed.questions) && parsed.questions.length > 0
+                      ? {
+                            questions: parsed.questions.slice(0, 4).map((entry) => ({
+                                q: String(entry?.q || '').slice(0, 200),
+                                why: String(entry?.why || '').slice(0, 160),
+                                suggestion: String(entry?.suggestion || '').slice(0, 200),
+                            })),
+                        }
+                      : {}),
               }
             : null;
     try {
@@ -232,19 +255,25 @@ export async function POST(request) {
     const userPrompt = String(body?.prompt || '').slice(0, MAX_INPUT_CHARS).trim();
     // Any vision image upgrades i2v to the vision-grounded template.
     const visionImages = collectVisionImages(body);
-    const requestedMode = MODE_TEMPLATES[body?.mode] ? body.mode : 't2i';
+    const requestedMode = body?.mode === 'clarify'
+        ? 'clarify'
+        : (MODE_TEMPLATES[body?.mode] ? body.mode : 't2i');
     const mode = requestedMode === 'i2v' && visionImages.length > 0 ? 'i2v-vision' : requestedMode;
+    const isClarify = requestedMode === 'clarify';
     if (!userPrompt) {
         return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
 
-    const system =
-        'You are the Prompt Agent of an AI film/image studio. First infer what ' +
-        'the user actually wants; then write the full production prompt.\n' +
-        `Mode brief: ${MODE_TEMPLATES[mode]}\n` +
-        'Reply with STRICT JSON only, no fences: ' +
-        '{"intent":"one plain sentence describing what the user wants",' +
-        '"prompt":"the full production prompt"}';
+    // The planning pass has its own contract (it asks questions and spends
+    // nothing), so it replaces the normal system prompt rather than extending it.
+    const system = body?.mode === 'clarify'
+        ? `You are the Prompt Agent of an AI film/image studio.\n${CLARIFY_TEMPLATE}`
+        : 'You are the Prompt Agent of an AI film/image studio. First infer what ' +
+          'the user actually wants; then write the full production prompt.\n' +
+          `Mode brief: ${MODE_TEMPLATES[mode]}\n` +
+          'Reply with STRICT JSON only, no fences: ' +
+          '{"intent":"one plain sentence describing what the user wants",' +
+          '"prompt":"the full production prompt"}';
 
     const baseUrl = (process.env.SUPERBAPI_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
 
@@ -300,7 +329,18 @@ export async function POST(request) {
         let usedModel = AGENT_MODEL;
         let usedMode = mode;
 
-        if (mode === 'i2v-vision' && visionImages.length === 1) {
+        if (isClarify) {
+            parsed = visionImages.length > 0
+                ? await callAgent(VISION_MODEL, system, [
+                      { type: 'text', text: userPrompt },
+                      ...visionImages.slice(0, 1).flatMap((entry) => [
+                          { type: 'text', text: IMAGE_ROLE_LABELS[entry.role] },
+                          { type: 'image_url', image_url: { url: entry.data } },
+                      ]),
+                  ])
+                : await callAgent(AGENT_MODEL, system, userPrompt);
+            if (parsed) visionUsed = visionImages.length > 0;
+        } else if (mode === 'i2v-vision' && visionImages.length === 1) {
             // Single frame: one vision call does see-and-write in one pass.
             parsed = await callAgent(VISION_MODEL, system, [
                 { type: 'text', text: userPrompt },
