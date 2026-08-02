@@ -29,6 +29,10 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 //                its first_frame_image dialect (pixel-verified) — and it
 //                is the only PIXEL-EXACT i2v family here; Kling drops
 //                frames upstream and relies on vision grounding.
+// Which live ids are video models. Kept as a family pattern (not a list) so
+// the picker can surface a model the gateway adds before we know about it.
+const VIDEO_ID_PATTERN = /(kling|seedance|vidu|pixverse|veo|grok-video|grok-[\d.]+-video|omni)/i;
+
 const VIDEO_CANDIDATES = [
     { id: 'kling-2.5-720p', name: 'Kling 2.5 · 720p', durations: [5, 10], resolution: '720p', cost: 0.6, shape: '16:9 · 1280x720', audio: false, frames: 'described', price: '$0.60 / clip' },
     { id: 'kling-2.5', name: 'Kling 2.5', durations: [5, 10], resolution: '720p', cost: 1.0, shape: '16:9', audio: false, frames: 'described', price: '$1.00 / clip' },
@@ -41,9 +45,9 @@ const VIDEO_CANDIDATES = [
     // (Seedance needs ~14s+) were aborted mid-flight. Gateway now gives video
     // submits a 120s deadline; both families re-verified there with real
     // renders. Seedance 2.0 bills PER SECOND — the price label must say so.
-    { id: 'doubao-seedance-2-0-mini', name: 'Seedance 2.0 Mini', cost: 1.0, recommended: true, perSecond: true, durations: [5, 10, 12], resolution: '720p', price: '$1.00 / second' },
-    { id: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 Fast', cost: 1.61, recommended: true, perSecond: true, durations: [5, 10, 12], resolution: '720p', price: '$1.61 / second' },
-    { id: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0', cost: 2.22, recommended: true, perSecond: true, durations: [5, 10, 12], resolution: '720p', price: '$2.22 / second' },
+    { id: 'doubao-seedance-2-0-mini', name: 'Seedance 2.0 Mini', cost: 1.0, recommended: true, perSecond: true, durations: [4, 5, 8, 10, 12], resolution: '720p', price: '$1.00 / second' },
+    { id: 'doubao-seedance-2-0-fast-260128', name: 'Seedance 2.0 Fast', cost: 1.61, recommended: true, perSecond: true, durations: [4, 5, 8, 10, 12], resolution: '720p', price: '$1.61 / second' },
+    { id: 'doubao-seedance-2-0-260128', name: 'Seedance 2.0', cost: 2.22, recommended: true, perSecond: true, durations: [4, 5, 8, 10, 12], resolution: '720p', price: '$2.22 / second' },
     { id: 'grok-1.5-video-6s', name: 'Grok Video 1.5 · 6s', durations: [6], fixed: true, resolution: '720p', cost: 0.8, price: '$0.80 / clip' },
     { id: 'grok-video-3', name: 'Grok Video 3 · 6s', durations: [6], fixed: true, resolution: '720p', cost: 0.8, price: '$0.80 / clip' },
     { id: 'grok-video-3-10s', name: 'Grok Video 3 · 10s', durations: [10], fixed: true, resolution: '720p', cost: 0.8, price: '$0.80 / clip' },
@@ -171,11 +175,26 @@ export async function GET(request) {
     }
 
     const live = await liveModelIds(apiKey);
-    const candidates = live
-        ? VIDEO_CANDIDATES.filter((model) => live.has(model.id))
-        : VIDEO_CANDIDATES;
-    const dropped = VIDEO_CANDIDATES.length - candidates.length;
-    if (dropped > 0) console.warn(`Capabilities: ${dropped} catalog id(s) are no longer on the gateway`);
+    const knownById = new Map(VIDEO_CANDIDATES.map((model) => [model.id, model]));
+    let candidates;
+    if (live) {
+        // Live list drives the picker. Video ids are recognised by family so a
+        // brand-new model the gateway starts serving still reaches users
+        // (with conservative defaults) instead of waiting on a deploy.
+        candidates = [...live]
+            .filter((id) => VIDEO_ID_PATTERN.test(id))
+            .map((id) => knownById.get(id) || {
+                id,
+                name: id.replace(/^models\//, '').replace(/[-_]/g, ' '),
+                durations: [5, 10],
+                price: 'see superbapi.com/models',
+                unverified: true,
+            });
+        const retired = VIDEO_CANDIDATES.filter((model) => !live.has(model.id)).map((m) => m.id);
+        if (retired.length) console.warn('Capabilities: retired upstream →', retired.join(', '));
+    } else {
+        candidates = VIDEO_CANDIDATES; // list unreachable — fall back to ours
+    }
 
     const [results, degraded] = await Promise.all([
         Promise.all(candidates.map(async (model) => ({
