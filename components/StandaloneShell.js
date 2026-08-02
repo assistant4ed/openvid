@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { WorkspaceStudio, ImageStudio, VideoStudio, ClippingStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, getUserBalance } from 'studio';
+import { WorkspaceStudio, ImageStudio, VideoStudio, ClippingStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, AudioStudio, MarketingStudio, WorkflowStudio, AgentStudio, AppsStudio, AiInfluencerStudio, TaskBoard, getUserBalance } from 'studio';
 
 const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignAgentStudio), {
   ssr: false,
@@ -268,6 +268,15 @@ const getNavigationCategory = (tabId) => (
 const BACKENDLESS_TABS = new Set([
   'lipsync', 'audio', 'clipping', 'body-swap', 'marketing', 'vibe-motion',
   'ai-influencer', 'workflows', 'agents', 'apps',
+]);
+
+// Tabs that generate things, and therefore share the task board. The board is
+// mounted once by the shell rather than per studio, so a render started in one
+// tab is still visible from every other one. Editors and browsers (workflows,
+// agents, apps) have nothing to put on it and keep their full width.
+const BOARD_TABS = new Set([
+  'workspace', 'image', 'video', 'cinema', 'audio', 'clipping', 'lipsync',
+  'body-swap', 'marketing', 'vibe-motion', 'ai-influencer',
 ]);
 
 const STORAGE_KEY = 'muapi_key';
@@ -1027,6 +1036,10 @@ export default function StandaloneShell() {
         )}
 
         {/* Studio Content */}
+        {/* The board sits OUTSIDE the per-tab panels on purpose: a render
+            started in Cinema has to stay visible from Images. It is the one
+            place a task exists, so switching tabs never looks like losing
+            work. */}
         <div className="flex-1 min-h-0 h-full relative overflow-hidden bg-[#030303]">
         {BACKENDLESS_TABS.has(activeTab) && (
           <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-center gap-3 border-b border-[rgba(245,158,11,0.3)] bg-[#1a1206]/95 px-4 py-2 backdrop-blur-md">
@@ -1107,6 +1120,7 @@ export default function StandaloneShell() {
           />
         </div>
       </div>
+      {BOARD_TABS.has(activeTab) && <TaskBoard apiKey={apiKey} />}
     </div>
 
       {/* Global generation activity and notification stack */}

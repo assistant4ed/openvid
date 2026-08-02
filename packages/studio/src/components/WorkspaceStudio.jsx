@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import {
-  planPrompt,
-  pollRenderJob,
-  pollSuperbVideoTask,
-  retryRenderJob,
-  submitImageJob,
-  submitVideoJob,
-} from "../muapi.js";
+import { planPrompt } from "../muapi.js";
 import { CAMERA_PATH_PRESETS } from "../utils/cameraPathPresets.js";
 import { notifyError, notifyInfo } from "../utils/notify.js";
+import {
+  getTasks,
+  hydrate,
+  startPolling,
+  submitImage,
+  submitVideo,
+  subscribe,
+} from "../utils/taskStore.js";
 import {
   PromptAction,
   PromptComposer,
@@ -31,10 +32,8 @@ import UploadZone from "./UploadZone.jsx";
 // plus the foldable task board. Modes enumerate every way to generate —
 // live ones run, future ones are honestly marked with what unlocks them.
 
-const TASKS_KEY = "workspace_tasks_v1";
-const BOARD_KEY = "workspace_board_open";
-const MAX_TASKS = 60;
 const ASPECTS = ["16:9", "9:16", "1:1"];
+const ADVANCED_KEY = "workspace_advanced_mode";
 
 const HERO_ART = [
   "/showcase/neon-alley.jpg",
@@ -48,11 +47,11 @@ const HERO_ART = [
 const MODES = [
   // ── video ──
   { id: "t2v", group: "Video", label: "Text → Video", hint: "Describe a shot", live: true,
-    gif: "/showcase/gifs/neon-alley.gif", sources: [] },
+    gif: "/showcase/gifs/explain-t2v.gif", sources: [] },
   { id: "i2v", group: "Video", label: "Image → Video", hint: "Animate a start frame", live: true,
-    gif: "/showcase/gifs/fn-i2v.gif", sources: ["start"] },
+    gif: "/showcase/gifs/explain-frame-exact.gif", sources: ["start"] },
   { id: "camera", group: "Video", label: "Camera Move", hint: "Preset move on your frame", live: true,
-    gif: "/showcase/gifs/glacier-reveal.gif", sources: ["start"], camera: true },
+    gif: "/showcase/gifs/explain-camera.gif", sources: ["start"], camera: true },
   { id: "frames2v", group: "Video", label: "Start + End Frame", hint: "Start on one image, end on another", live: true,
     gif: "/showcase/gifs/fn-frames.gif", sources: ["start", "end"] },
   { id: "refv2v", group: "Video", label: "Reference Video", hint: "Needs a video-edit model", live: false,
@@ -121,55 +120,12 @@ const AUDIO_ADDONS = {
   },
 };
 
-function loadTasks() {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(TASKS_KEY) || "[]");
-    // Video runs live server-side now (jobId) — only image tasks, which still
-    // render in-browser, can be orphaned by a reload.
-    return parsed.map((task) =>
-      task.status === "rendering" && !task.taskId && !task.jobId
-        ? { ...task, status: "failed", error: "Interrupted before submit — run again" }
-        : task,
-    );
-  } catch {
-    return [];
-  }
-}
-
-function persistTasks(tasks) {
-  try {
-    const slim = tasks.slice(0, MAX_TASKS).map((task) => ({
-      ...task,
-      url: typeof task.url === "string" && task.url.startsWith("data:") ? null : task.url,
-    }));
-    window.localStorage.setItem(TASKS_KEY, JSON.stringify(slim));
-  } catch {
-    // storage full — board still works in memory
-  }
-}
-
 function readCaps() {
   try {
     return JSON.parse(window.localStorage.getItem("superb_caps_v1") || "null");
   } catch {
     return null;
   }
-}
-
-// Merge the server task history into the local board. Union by id; when both
-// sides know a task, a terminal copy (done/failed) beats a stale "rendering"
-// one, and otherwise the local copy wins (it may hold an in-flight poller).
-function mergeTaskLists(local, remote) {
-  const terminal = (task) => task.status === "done" || task.status === "failed";
-  const byId = new Map();
-  for (const task of remote) byId.set(task.id, task);
-  for (const task of local) {
-    const other = byId.get(task.id);
-    byId.set(task.id, other && terminal(other) && !terminal(task) ? other : task);
-  }
-  return [...byId.values()]
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    .slice(0, MAX_TASKS);
 }
 
 export default function WorkspaceStudio({ apiKey }) {
@@ -184,17 +140,19 @@ export default function WorkspaceStudio({ apiKey }) {
   const [preset, setPreset] = useState("dolly-in");
   const [music, setMusic] = useState("");
   const [script, setScript] = useState("");
-  const [previewTask, setPreviewTask] = useState(null);
   const [plan, setPlan] = useState(null);      // { intent, questions, prompt }
   const [planning, setPlanning] = useState(false);
   const [videoModel, setVideoModel] = useState("");
   const [duration, setDuration] = useState(5);
   const [aspect, setAspect] = useState("16:9");
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(getTasks());
+  const rendering = tasks.filter((task) => task.status === "rendering").length;
   const [caps, setCaps] = useState(null);
-  const [boardOpen, setBoardOpen] = useState(true);
+  // Standard runs what you typed. Advanced makes the agent plan the shot out
+  // loud first — questions, then a beat-by-beat storyline you approve — so the
+  // disagreement surfaces before the money does.
+  const [advanced, setAdvanced] = useState(false);
   const [restoredFrom, setRestoredFrom] = useState(null);
-  const activeCount = useRef(0);
   const composerRef = useRef(null);
 
   const mode = MODES.find((entry) => entry.id === modeId) || MODES[0];
@@ -226,108 +184,27 @@ export default function WorkspaceStudio({ apiKey }) {
     return SOURCE_DEFS[key]?.chip || key;
   };
 
-  const updateTask = (id, patch) => {
-    setTasks((previous) => {
-      const next = previous.map((task) => (task.id === id ? { ...task, ...patch } : task));
-      persistTasks(next);
-      return next;
-    });
-  };
-
-  // Server sync: signed-in users keep their board across browsers and
-  // devices. Local-first — a 401 (signed out) or missing DB is a silent no-op.
-  const serverSyncReady = useRef(false);
-  const pushTimer = useRef(null);
-  const [historySync, setHistorySync] = useState("unknown"); // 'on' | 'off' | 'unknown'
+  // The board is shared with every other tab and rendered by the shell — this
+  // studio only reads it (to know how many renders are in flight) and submits
+  // into it. See utils/taskStore.js.
+  useEffect(() => subscribe(setTasks), []);
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch("/api/account/tasks");
-        if (!cancelled) setHistorySync(response.ok ? "on" : "off");
-        if (response.ok && !cancelled) {
-          const data = await response.json();
-          if (Array.isArray(data.tasks) && data.tasks.length > 0) {
-            setTasks((local) => {
-              const merged = mergeTaskLists(local, data.tasks);
-              persistTasks(merged);
-              // Reconnect to server-known renders this browser never saw.
-              merged
-                .filter((task) => task.status === "rendering" && (task.jobId || task.taskId) &&
-                  !local.some((entry) => entry.id === task.id))
-                .forEach((task) => {
-                  const resume = task.jobId
-                    ? pollRenderJob(task.jobId)
-                    : pollSuperbVideoTask(task.taskId);
-                  resume
-                    .then((result) => updateTask(task.id, { status: "done", url: result.url }))
-                    .catch((error) => updateTask(task.id, {
-                      status: "failed",
-                      error: error?.message?.slice(0, 140) || "Task failed",
-                    }));
-                });
-              return merged;
-            });
-          }
-        }
-      } catch {
-        // offline or accounts disabled — board stays local
-      }
-      if (!cancelled) serverSyncReady.current = true;
-    })();
-    return () => { cancelled = true; };
+    hydrate(window.localStorage.getItem("superbapi_key")).then(startPolling);
   }, []);
 
-  // Push the board after every change, debounced. Never before the initial
-  // merge finished — an empty fresh browser must not wipe server history.
   useEffect(() => {
-    if (!serverSyncReady.current || tasks.length === 0) return;
-    clearTimeout(pushTimer.current);
-    pushTimer.current = setTimeout(() => {
-      fetch("/api/account/tasks", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tasks: tasks.slice(0, MAX_TASKS) }),
-      }).catch(() => {});
-    }, 1500);
-    return () => clearTimeout(pushTimer.current);
-  }, [tasks]);
-
-  useEffect(() => {
-    if (!previewTask) return undefined;
-    const onKey = (event) => { if (event.key === "Escape") setPreviewTask(null); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [previewTask]);
-
-  useEffect(() => {
-    const loaded = loadTasks();
-    setTasks(loaded);
     setCaps(readCaps());
-    setBoardOpen(window.localStorage.getItem(BOARD_KEY) !== "closed");
+    setAdvanced(window.localStorage.getItem(ADVANCED_KEY) === "on");
     const handleCaps = (event) => setCaps(event.detail);
+    // "Reuse" is clicked on the shared board, which the shell owns — it
+    // announces the task and whichever composer is open picks it up.
+    const handleReuse = (event) => restoreTask(event.detail);
     window.addEventListener("superb:caps", handleCaps);
-
-    // Renders continue server-side while the user is away — reconnect to
-    // every unfinished task instead of abandoning it. jobId = the server
-    // pipeline; taskId = legacy direct upstream polling.
-    loaded
-      .filter((task) => task.status === "rendering" && (task.jobId || task.taskId))
-      .forEach((task) => {
-        const resume = task.jobId
-          ? pollRenderJob(task.jobId)
-          : pollSuperbVideoTask(task.taskId);
-        resume
-          .then((result) => updateTask(task.id, { status: "done", url: result.url }))
-          .catch((error) =>
-            updateTask(task.id, {
-              status: "failed",
-              error: error?.message?.slice(0, 140) || "Task failed",
-            }),
-          );
-      });
-
-    return () => window.removeEventListener("superb:caps", handleCaps);
+    window.addEventListener("studio:reuse-task", handleReuse);
+    return () => {
+      window.removeEventListener("superb:caps", handleCaps);
+      window.removeEventListener("studio:reuse-task", handleReuse);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -338,12 +215,6 @@ export default function WorkspaceStudio({ apiKey }) {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
-
-  const toggleBoard = () => {
-    const next = !boardOpen;
-    setBoardOpen(next);
-    window.localStorage.setItem(BOARD_KEY, next ? "open" : "closed");
-  };
 
   const capsVideo = caps?.video || [];
   const capsModel = capsVideo.find((entry) => entry.id === videoModel) || capsVideo[0] || null;
@@ -390,30 +261,6 @@ export default function WorkspaceStudio({ apiKey }) {
     }
   }, [openPopover]);
 
-  const deleteTask = (id) => {
-    setTasks((previous) => {
-      const next = previous.filter((task) => task.id !== id);
-      persistTasks(next);
-      return next;
-    });
-  };
-
-  // Re-run a failed job: the server clones its stored spec (frames included),
-  // so retry works even in a browser that never saw the original upload.
-  const retryTask = async (task) => {
-    try {
-      const jobId = await retryRenderJob(task.jobId);
-      updateTask(task.id, { status: "rendering", error: null, jobId });
-      const result = await pollRenderJob(jobId);
-      updateTask(task.id, { status: "done", url: result.url });
-    } catch (error) {
-      updateTask(task.id, {
-        status: "failed",
-        error: error?.message?.slice(0, 140) || "Retry failed",
-      });
-    }
-  };
-
   const restoreTask = async (task) => {
     const settings = task.settings || {};
     if (settings.modeId && MODES.some((entry) => entry.id === settings.modeId)) switchMode(settings.modeId);
@@ -446,16 +293,16 @@ export default function WorkspaceStudio({ apiKey }) {
     notifyInfo("Task settings loaded — edit anything and generate again.");
   };
 
-  const useAsStartFrame = (url) => {
-    switchMode("i2v");
-    setStartFrame(url);
-  };
-
   const presetEntry = CAMERA_PATH_PRESETS.find((entry) => entry.id === preset);
 
   // Ask the agent to think out loud first — free, and it catches the
   // misunderstandings that otherwise only surface after a paid render.
-  const handlePlan = async () => {
+  //
+  // Standard asks what it needs to know. Advanced also breaks the clip into
+  // timed beats, because "what happens at second 6" is the question that
+  // decides whether a 10-second shot is directed or one idea held for ten
+  // seconds — and it is far cheaper to answer before the render than after.
+  const handlePlan = async (depth = advanced ? "storyline" : "clarify") => {
     const trimmed = prompt.trim();
     if (!trimmed) {
       notifyError("Describe what you want first — then I can ask about the details.");
@@ -466,7 +313,7 @@ export default function WorkspaceStudio({ apiKey }) {
       const asVision = (value, role) =>
         typeof value === "string" && value.startsWith("data:image/") ? { role, data: value } : null;
       const images = [asVision(startFrame, "start"), asVision(refImage, "ref")].filter(Boolean);
-      setPlan(await planPrompt(trimmed, images));
+      setPlan(await planPrompt(trimmed, images, { depth, duration }));
     } catch (error) {
       notifyError(error?.message?.slice(0, 160) || "Could not plan this run.");
     } finally {
@@ -495,7 +342,9 @@ export default function WorkspaceStudio({ apiKey }) {
       notifyError("Describe what to create first.");
       return;
     }
-    if (activeCount.current >= MAX_CONCURRENT) {
+    // Count from the shared board, not a local counter: renders started in
+    // other tabs use the same gateway submit window, so they have to count.
+    if (rendering >= MAX_CONCURRENT) {
       notifyError(`${MAX_CONCURRENT} tasks are already rendering — wait for one to finish.`);
       return;
     }
@@ -507,87 +356,44 @@ export default function WorkspaceStudio({ apiKey }) {
       return;
     }
 
-    const id = `ws_${Date.now()}`;
-    const task = {
-      id,
-      type: mode.group.toLowerCase(),
-      mode: mode.label,
-      prompt: trimmed,
-      model: isVideo ? capsModel?.name || "Kling 2.5" : "Gemini Image",
-      preset: mode.camera ? presetEntry?.label || null : null,
+    // Only images whose chips are on the bar go into the run — a leftover
+    // upload from another mode never leaks in.
+    const chipValue = (key) => (activeSources.includes(key) ? sourceValues[key] : null);
+    const chipRefs = ["ref", "ref2"].map(chipValue).filter(Boolean);
+    const meta = {
+      source: mode.label,
+      modelLabel: isVideo ? capsModel?.name || capsModel?.id : "Gemini Image",
       settings: { modeId, preset, model: capsModel?.id || null, duration, aspect },
-      status: "rendering",
-      url: null,
-      error: null,
-      createdAt: Date.now(),
+      thumb: chipValue("start") || chipRefs[0] || null,
+      estimatedCost,
     };
-    setTasks((previous) => {
-      const next = [task, ...previous];
-      persistTasks(next);
-      return next;
-    });
 
-    activeCount.current += 1;
-    try {
-      let result;
-      // Only images whose chips are on the bar go into the run — a leftover
-      // upload from another mode never leaks in.
-      const chipValue = (key) => (activeSources.includes(key) ? sourceValues[key] : null);
-      const chipRefs = ["ref", "ref2"].map(chipValue).filter(Boolean);
-      if (!isVideo) {
-        // Images ride the job pipeline too — grounding, render and storage
-        // all happen server-side, so a reload can't orphan them anymore.
-        const templated = mode.prefix ? `${mode.prefix}${trimmed}` : trimmed;
-        result = await submitImageJob({
-          prompt: templated,
-          ...(chipRefs.length === 1 ? { image_url: chipRefs[0] } : {}),
-          ...(chipRefs.length > 1 ? { images_list: chipRefs } : {}),
-          onJobId: (jobId) => updateTask(id, { jobId }),
-        });
-      } else {
-        const movePrefix = mode.camera && presetEntry
-          ? `Camera move: ${presetEntry.label} (${presetEntry.hint}). `
-          : "";
-        // Video goes through the server-side job pipeline: the spec is safe
-        // in the database before this promise resolves, so a reload (or a
-        // closed laptop) can no longer kill the render.
-        result = await submitVideoJob({
-          prompt: `${movePrefix}${trimmed}`.trim(),
-          videoModel: capsModel?.id,
-          duration,
-          aspect_ratio: aspect,
-          ...(chipValue("start") ? { image_url: chipValue("start") } : {}),
-          ...(chipValue("end") ? { end_image: chipValue("end") } : {}),
-          ...(chipRefs.length > 0 ? { style_refs: chipRefs } : {}),
-          onJobId: (jobId) => updateTask(id, { jobId }),
-        });
-      }
-      if (!result?.url) throw new Error("No output returned");
-      let finalUrl = result.url;
-      // Image results arrive as data URLs, which never survive persistence
-      // (or account sync) — park them on the durable asset host so the
-      // picture is still there tomorrow and on other devices.
-      if (finalUrl.startsWith("data:image/")) {
-        try {
-          const hosted = await fetch("/api/asset", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ dataUrl: finalUrl }),
-          });
-          if (hosted.ok) {
-            const data = await hosted.json();
-            if (data?.url) finalUrl = data.url;
-          }
-        } catch {
-          // hosting failed — keep the data URL for this session
-        }
-      }
-      updateTask(id, { status: "done", url: finalUrl });
-    } catch (error) {
-      updateTask(id, { status: "failed", error: error?.message?.slice(0, 140) || "Task failed" });
-    } finally {
-      activeCount.current -= 1;
+    // Submit and return. The render runs server-side and the shared task board
+    // reports it from whatever tab the user wanders to next — nothing here
+    // waits, so the composer stays usable and a second shot can go out while
+    // the first is still cooking.
+    if (!isVideo) {
+      const templated = mode.prefix ? `${mode.prefix}${trimmed}` : trimmed;
+      submitImage({
+        prompt: templated,
+        ...(chipRefs.length === 1 ? { image_url: chipRefs[0] } : {}),
+        ...(chipRefs.length > 1 ? { images_list: chipRefs } : {}),
+      }, meta);
+    } else {
+      const movePrefix = mode.camera && presetEntry
+        ? `Camera move: ${presetEntry.label} (${presetEntry.hint}). `
+        : "";
+      submitVideo({
+        prompt: `${movePrefix}${trimmed}`.trim(),
+        videoModel: capsModel?.id,
+        duration,
+        aspect_ratio: aspect,
+        ...(chipValue("start") ? { image_url: chipValue("start") } : {}),
+        ...(chipValue("end") ? { end_image: chipValue("end") } : {}),
+        ...(chipRefs.length > 0 ? { style_refs: chipRefs } : {}),
+      }, meta);
     }
+    notifyInfo("Queued — watch it on the task board. You can keep working.");
   };
 
   const estimatedCost = (() => {
@@ -597,7 +403,6 @@ export default function WorkspaceStudio({ apiKey }) {
     return `$${total.toFixed(2)}`;
   })();
 
-  const rendering = tasks.filter((task) => task.status === "rendering").length;
 
   // Source chip: opens an upload frame; shows the thumbnail once set. Chips
   // the user added themselves carry a ✕ to take them off the bar again.
@@ -1023,6 +828,36 @@ export default function WorkspaceStudio({ apiKey }) {
                 )}
               </PromptControls>
 
+              {/* Standard / Advanced. Advanced is not "more settings" — it is
+                  a planning pass: the agent asks what it needs to know and
+                  writes a beat-by-beat storyline you approve, all before a
+                  cent is spent. */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !advanced;
+                  setAdvanced(next);
+                  window.localStorage.setItem(ADVANCED_KEY, next ? "on" : "off");
+                }}
+                title={advanced
+                  ? "Advanced: plan the shot with the agent before generating"
+                  : "Standard: generate straight from your prompt"}
+                className={promptControlClassName({ active: advanced, compact: true })}
+              >
+                {advanced ? "Advanced" : "Standard"}
+              </button>
+
+              {advanced && (
+                <button
+                  type="button"
+                  disabled={planning || !mode.live}
+                  onClick={() => handlePlan("storyline")}
+                  className={promptControlClassName({ compact: true })}
+                >
+                  {planning ? "Planning…" : "Plan the shot"}
+                </button>
+              )}
+
               <PromptAction disabled={!mode.live} onClick={handleCreate}>
                 {isVideo ? `Generate · ${duration}s` : "Generate"}
               </PromptAction>
@@ -1031,119 +866,10 @@ export default function WorkspaceStudio({ apiKey }) {
         </div>
       </div>
 
-      {/* ── Foldable task board ── */}
-      <div
-        className={`relative flex h-full shrink-0 flex-col border-l border-white/[0.07] bg-[#08080a] transition-all duration-300 ${
-          boardOpen ? "w-[320px] xl:w-[380px]" : "w-[46px]"
-        }`}
-      >
-        <button
-          type="button"
-          onClick={toggleBoard}
-          title={boardOpen ? "Fold task board" : "Unfold task board"}
-          className="flex h-11 w-full items-center justify-center gap-2 border-b border-white/[0.07] text-white/50 transition-colors hover:text-white"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            className={`transition-transform ${boardOpen ? "" : "rotate-180"}`} aria-hidden="true">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-          {boardOpen && (
-            <span className="slate-label">
-              TASK BOARD · {tasks.length}
-              {historySync === "off" && tasks.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent("studio:open-settings"))}
-                  className="ml-2 normal-case tracking-normal font-sans text-[11px] text-white/35 underline decoration-white/20 underline-offset-2 hover:text-[#d4f939] cursor-pointer"
-                >
-                  this browser only — sign in to keep history
-                </button>
-              )}
-            </span>
-          )}
-          {rendering > 0 && <span className="rec-dot shrink-0" />}
-        </button>
+      {/* The task board lives in the shell now, shared with every other tab —
+          see utils/taskStore.js. A render started here stays visible from
+          Images or Cinema instead of disappearing with the tab. */}
 
-        {boardOpen ? (
-          <div className="flex-1 space-y-3 overflow-y-auto p-3 custom-scrollbar">
-            {tasks.length === 0 ? (
-              <p className="p-4 text-center text-[12px] leading-relaxed text-white/35">
-                No tasks yet — generate something and it lands here with live status.
-              </p>
-            ) : (
-              tasks.map((task) => (
-                <article
-                  key={task.id}
-                  onClick={() => (task.status === "done" && task.url ? setPreviewTask(task) : restoreTask(task))}
-                  title="Click to load this task's settings"
-                  className={`cursor-pointer overflow-hidden rounded-xl border transition-colors ${
-                    restoredFrom === task.id ? "border-[rgba(212,249,57,0.4)]" : "border-white/[0.07] hover:border-white/20"
-                  } bg-white/[0.02]`}
-                >
-                  <div className="relative flex aspect-video items-center justify-center bg-black/60">
-                    {task.status === "done" && task.url ? (
-                      task.type === "video" ? (
-                        <video src={task.url} controls muted playsInline className="h-full w-full bg-black object-contain" onClick={(e) => e.stopPropagation()} />
-                      ) : (
-                        <img src={task.url} alt={task.prompt} className="h-full w-full object-cover" />
-                      )
-                    ) : task.status === "rendering" ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="rec-dot" />
-                        <span className="slate-label">RENDERING — SAFE TO LEAVE</span>
-                      </div>
-                    ) : (
-                      <p className="px-3 text-center text-[10px] text-red-400/80">{task.error}</p>
-                    )}
-                    <span className="absolute left-2 top-2 rounded border border-white/10 bg-black/60 px-1.5 py-0.5 font-slate text-[8px] uppercase tracking-wider text-white/70 backdrop-blur-sm">
-                      {task.mode || task.type}{task.preset ? ` · ${task.preset}` : ""}
-                    </span>
-                  </div>
-                  <p className="truncate px-2.5 pt-1.5 text-[11px] text-white/60" title={task.prompt}>
-                    {task.prompt || "(no prompt)"}
-                  </p>
-                  <div className="flex items-center gap-1.5 px-2.5 pb-2 pt-1" onClick={(e) => e.stopPropagation()}>
-                    {task.status === "done" && task.url && (
-                      <>
-                        <a href={task.url} download={`task-${task.id}.${task.type === "video" ? "mp4" : "jpg"}`}
-                          target="_blank" rel="noreferrer"
-                          className="rounded border border-white/10 bg-white/[0.04] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-white/60 transition-colors hover:border-white/25 hover:text-white">
-                          Download
-                        </a>
-                        {task.type === "image" && (
-                          <button type="button" onClick={() => useAsStartFrame(task.url)}
-                            className="rounded border border-[rgba(212,249,57,0.3)] bg-[rgba(212,249,57,0.07)] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-[#d4f939] transition-colors hover:bg-[rgba(212,249,57,0.14)]">
-                            → Animate
-                          </button>
-                        )}
-                        <button type="button" onClick={() => restoreTask(task)}
-                          className="rounded border border-white/10 bg-white/[0.04] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-white/60 transition-colors hover:border-white/25 hover:text-white">
-                          Reuse
-                        </button>
-                      </>
-                    )}
-                    {task.status === "failed" && task.jobId && (
-                      <button type="button" onClick={() => retryTask(task)}
-                        className="rounded border border-[rgba(212,249,57,0.3)] bg-[rgba(212,249,57,0.07)] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-[#d4f939] transition-colors hover:bg-[rgba(212,249,57,0.14)]">
-                        Retry
-                      </button>
-                    )}
-                    <button type="button" onClick={() => deleteTask(task.id)}
-                      className="ml-auto rounded border border-white/10 bg-white/[0.04] px-2 py-1 font-slate text-[8px] uppercase tracking-wider text-red-400/80 transition-colors hover:border-red-400/40">
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col items-center gap-2 pt-3">
-            <span className="font-slate text-[10px] text-white/40">{tasks.length}</span>
-            {rendering > 0 && <span className="rec-dot" />}
-          </div>
-        )}
-      </div>
 
       {plan && (
         <div
@@ -1172,6 +898,36 @@ export default function WorkspaceStudio({ apiKey }) {
                 <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">What I understood</span>
                 <p className="mt-1 text-sm leading-relaxed text-white/80">{plan.intent}</p>
               </div>
+
+              {plan.logline && (
+                <div>
+                  <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">The clip in one line</span>
+                  <p className="mt-1 text-sm leading-relaxed text-white/80">{plan.logline}</p>
+                </div>
+              )}
+
+              {plan.beats?.length > 0 && (
+                <div>
+                  <span className="font-slate text-[10px] uppercase tracking-wider text-white/35">
+                    Storyline — what happens when
+                  </span>
+                  <ol className="mt-2 space-y-2">
+                    {plan.beats.map((beat, index) => (
+                      <li key={index} className="flex gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                        <span className="shrink-0 font-slate text-[10px] uppercase tracking-wider text-[#d4f939]">
+                          {beat.time}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs leading-relaxed text-white/80">{beat.action}</p>
+                          {beat.camera && (
+                            <p className="mt-0.5 text-[11px] text-white/40">Camera: {beat.camera}</p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
               {plan.questions.length > 0 && (
                 <div>
@@ -1223,83 +979,6 @@ export default function WorkspaceStudio({ apiKey }) {
         </div>
       )}
 
-      {previewTask && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
-          onClick={() => setPreviewTask(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Result preview"
-        >
-          <div
-            className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#0b0b0d] shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-white/8 px-4 py-2.5">
-              <span className="font-slate text-[10px] uppercase tracking-wider text-[#d4f939]">
-                {previewTask.mode}{previewTask.preset ? ` · ${previewTask.preset}` : ""}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPreviewTask(null)}
-                aria-label="Close preview"
-                className="rounded-lg border border-white/10 px-2 py-1 text-xs text-white/50 transition-colors hover:border-white/30 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 items-center justify-center bg-black">
-              {previewTask.type === "video" ? (
-                <video
-                  src={previewTask.url}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="max-h-[65vh] w-auto max-w-full"
-                />
-              ) : (
-                <img src={previewTask.url} alt={previewTask.prompt} className="max-h-[65vh] w-auto max-w-full" />
-              )}
-            </div>
-
-            <div className="shrink-0 space-y-2 border-t border-white/8 px-4 py-3">
-              <p className="text-xs leading-relaxed text-white/70">{previewTask.prompt || "(no prompt)"}</p>
-              <p className="font-slate text-[10px] uppercase tracking-wider text-white/35">
-                {[previewTask.model, previewTask.settings?.duration ? `${previewTask.settings.duration}s` : null,
-                  previewTask.settings?.aspect].filter(Boolean).join(" · ")}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <a
-                  href={previewTask.url}
-                  download={`openvid-${previewTask.id}.${previewTask.type === "video" ? "mp4" : "jpg"}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg border border-white/12 px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-white/70 transition-colors hover:border-white/30 hover:text-white"
-                >
-                  Download
-                </a>
-                <button
-                  type="button"
-                  onClick={() => { restoreTask(previewTask); setPreviewTask(null); }}
-                  className="rounded-lg border border-[rgba(212,249,57,0.35)] bg-[rgba(212,249,57,0.08)] px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-[#d4f939] transition-colors hover:bg-[rgba(212,249,57,0.16)]"
-                >
-                  Reuse settings
-                </button>
-                {previewTask.type === "image" && (
-                  <button
-                    type="button"
-                    onClick={() => { useAsStartFrame(previewTask.url); setPreviewTask(null); }}
-                    className="rounded-lg border border-white/12 px-3 py-1.5 font-slate text-[9px] uppercase tracking-wider text-white/70 transition-colors hover:border-white/30 hover:text-white"
-                  >
-                    → Animate
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

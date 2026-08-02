@@ -16,5 +16,7 @@ export { default as AppsStudio } from './components/AppsStudio';
 export { default as McpCliStudio } from './components/McpCliStudio';
 export { default as WorkspaceStudio } from './components/WorkspaceStudio';
 export { default as AiInfluencerStudio } from './components/AiInfluencerStudio';
+export { default as TaskBoard } from './components/TaskBoard';
+export * from './utils/taskStore.js';
 export * from './muapi';
 export * from './utils/superbKeys.js';

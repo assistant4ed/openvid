@@ -52,5 +52,8 @@ export async function POST(request) {
         request.headers.get('origin') ||
         new URL(request.url).origin;
 
-    return NextResponse.json({ url: `${origin}/api/asset/${id}`, id, bytes: bytes.length });
+    // The extension is load-bearing — the render networks type-check the URL
+    // path, not the Content-Type header we serve. See the GET route.
+    const extension = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
+    return NextResponse.json({ url: `${origin}/api/asset/${id}.${extension}`, id, bytes: bytes.length });
 }

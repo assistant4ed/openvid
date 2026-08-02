@@ -131,6 +131,28 @@ speaks). Each suggestion must be concrete enough to use as-is. The prompt
 field follows the same rules as a normal production prompt: rich, specific,
 one flowing paragraph, 200-260 words.`;
 
+// Advanced planning. Same free, pre-spend pass as clarify, but it also breaks
+// the clip into timed beats — the thing that decides whether a 10-second shot
+// is directed or one frozen idea held for 10 seconds. The user edits the beats
+// before anything is charged, and the accepted beats become the prompt.
+const STORYLINE_TEMPLATE = `Story planning pass — NOTHING is generated from this
+yet and nothing is charged. The user gave a brief and wants to shape the shot
+with you before spending.
+Reply with STRICT JSON only:
+{"intent":"one plain sentence naming what they want",
+ "logline":"one sentence describing the finished clip",
+ "beats":[{"time":"0-2s","action":"what happens on screen","camera":"what the camera does"}],
+ "questions":[{"q":"a specific question whose answer would change the shot",
+               "why":"what it affects","suggestion":"the choice you would make"}],
+ "prompt":"the full production prompt that renders these beats"}
+Cover the WHOLE requested duration with beats — 2 to 5 of them, contiguous, no
+gaps, the last one ending exactly at the clip's length. Ask 2-4 questions, never
+generic ones: they must be about THIS brief (wardrobe, time of day, whether the
+camera moves, who speaks). Each suggestion must be concrete enough to use
+as-is. The prompt field follows the normal production-prompt rules: rich,
+specific, one flowing paragraph, 200-260 words, present tense, single
+continuous shot, no cuts.`;
+
 const DESCRIBE_SYSTEM =
     'You are the eyes of a film studio. Describe the attached image with ' +
     'precision: subjects, their colors, clothing/materials, layout and ' +
@@ -193,6 +215,16 @@ function parseAgentReply(raw) {
             ? {
                   expandedPrompt: String(parsed.prompt).slice(0, 1200),
                   intent: String(parsed.intent || '').slice(0, 200),
+                  ...(parsed.logline ? { logline: String(parsed.logline).slice(0, 240) } : {}),
+                  ...(Array.isArray(parsed.beats) && parsed.beats.length > 0
+                      ? {
+                            beats: parsed.beats.slice(0, 6).map((entry) => ({
+                                time: String(entry?.time || '').slice(0, 24),
+                                action: String(entry?.action || '').slice(0, 300),
+                                camera: String(entry?.camera || '').slice(0, 200),
+                            })),
+                        }
+                      : {}),
                   ...(Array.isArray(parsed.questions) && parsed.questions.length > 0
                       ? {
                             questions: parsed.questions.slice(0, 4).map((entry) => ({
@@ -255,19 +287,24 @@ export async function POST(request) {
     const userPrompt = String(body?.prompt || '').slice(0, MAX_INPUT_CHARS).trim();
     // Any vision image upgrades i2v to the vision-grounded template.
     const visionImages = collectVisionImages(body);
-    const requestedMode = body?.mode === 'clarify'
-        ? 'clarify'
+    const PLANNING_MODES = new Set(['clarify', 'storyline']);
+    const requestedMode = PLANNING_MODES.has(body?.mode)
+        ? body.mode
         : (MODE_TEMPLATES[body?.mode] ? body.mode : 't2i');
     const mode = requestedMode === 'i2v' && visionImages.length > 0 ? 'i2v-vision' : requestedMode;
-    const isClarify = requestedMode === 'clarify';
+    const isClarify = PLANNING_MODES.has(requestedMode);
     if (!userPrompt) {
         return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
     }
 
     // The planning pass has its own contract (it asks questions and spends
     // nothing), so it replaces the normal system prompt rather than extending it.
-    const system = body?.mode === 'clarify'
-        ? `You are the Prompt Agent of an AI film/image studio.\n${CLARIFY_TEMPLATE}`
+    const system = isClarify
+        ? `You are the Prompt Agent of an AI film/image studio.\n${
+              requestedMode === 'storyline' ? STORYLINE_TEMPLATE : CLARIFY_TEMPLATE
+          }${
+              body?.duration ? `\nThe clip is ${Number(body.duration)} seconds long.` : ''
+          }`
         : 'You are the Prompt Agent of an AI film/image studio. First infer what ' +
           'the user actually wants; then write the full production prompt.\n' +
           `Mode brief: ${MODE_TEMPLATES[mode]}\n` +

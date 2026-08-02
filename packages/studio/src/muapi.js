@@ -366,7 +366,11 @@ export async function submitImageJob(params) {
 
 // Planning pass: the agent states what it understood, asks what would change
 // the shot, and drafts the prompt — all BEFORE anything is charged.
-export async function planPrompt(prompt, images) {
+//
+// `depth: 'storyline'` additionally breaks the clip into timed beats. Both
+// depths are free: the whole point is that the disagreement surfaces here,
+// where it costs a few cents of chat, rather than after a paid render.
+export async function planPrompt(prompt, images, options = {}) {
     const superbKey =
         typeof window !== 'undefined' ? window.localStorage.getItem('superbapi_key') : null;
     if (!superbKey) throw new Error('Sign in with your SuperbAPI key first.');
@@ -375,7 +379,8 @@ export async function planPrompt(prompt, images) {
         headers: { 'Content-Type': 'application/json', 'x-superb-key': superbKey },
         body: JSON.stringify({
             prompt,
-            mode: 'clarify',
+            mode: options.depth === 'storyline' ? 'storyline' : 'clarify',
+            ...(options.duration ? { duration: options.duration } : {}),
             images: (images || []).filter((entry) => entry?.data),
         }),
         signal: AbortSignal.timeout(90000),
@@ -384,6 +389,8 @@ export async function planPrompt(prompt, images) {
     if (!response.ok) throw new Error(data?.error || `Planning failed (${response.status})`);
     return {
         intent: data.intent || '',
+        logline: data.logline || '',
+        beats: Array.isArray(data.beats) ? data.beats : [],
         questions: Array.isArray(data.questions) ? data.questions : [],
         prompt: data.expandedPrompt || prompt,
     };
