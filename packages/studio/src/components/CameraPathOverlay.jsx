@@ -831,7 +831,15 @@ export default function CameraPathOverlay({
                     ? capsVideo.map((entry) => ({
                         value: entry.id,
                         label: entry.name,
-                        hint: `${entry.durations.join("/")}s`,
+                        // Durations alone said nothing about what you get or
+                        // what it costs — show the price and the capabilities
+                        // that actually differ between these models.
+                        hint: [
+                          `${entry.durations.join("/")}s`,
+                          entry.price,
+                          entry.frames === "literal" ? "uses your frame" : "frame guides scene",
+                          entry.audio === true ? "sound" : entry.audio === false ? "silent" : null,
+                        ].filter(Boolean).join(" · "),
                       }))
                     : CAMERA_PATH_MODELS.map((entry) => ({
                         value: entry.id,

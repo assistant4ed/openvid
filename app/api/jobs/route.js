@@ -60,11 +60,16 @@ export async function POST(request) {
         const jobId = await createJob({ apiKey, userId: userIdFromRequest(request), spec, kind });
         return NextResponse.json({ jobId, status: 'queued' }, { status: 201 });
     } catch (error) {
+        // "Could not create job" told the user nothing and hid real outages
+        // (the database being unreachable looked identical to a bad request).
         const status = error?.statusCode === 503 ? 503 : 500;
-        return NextResponse.json(
-            { error: status === 503 ? 'Job pipeline is not enabled on this deployment' : 'Could not create job' },
-            { status },
-        );
+        const detail = String(error?.message || '').slice(0, 200);
+        console.error('Job creation failed:', detail);
+        return NextResponse.json({
+            error: status === 503
+                ? 'Job pipeline is not enabled on this deployment'
+                : `Could not create job: ${detail || 'unknown error'}`,
+        }, { status });
     }
 }
 
