@@ -351,6 +351,7 @@ export default function StandaloneShell() {
 
   const [balance, setBalance] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
 
@@ -1040,16 +1041,28 @@ export default function StandaloneShell() {
             started in Cinema has to stay visible from Images. It is the one
             place a task exists, so switching tabs never looks like losing
             work. */}
-        <div className="flex-1 min-h-0 h-full relative overflow-hidden bg-[#030303]">
-        {BACKENDLESS_TABS.has(activeTab) && (
-          <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-center gap-3 border-b border-[rgba(245,158,11,0.3)] bg-[#1a1206]/95 px-4 py-2 backdrop-blur-md">
+        <div className="flex flex-1 min-h-0 h-full flex-col overflow-hidden bg-[#030303]">
+        {/* In the flow, not floating: as an absolutely-positioned overlay this
+            covered each studio's own header row (tabs, Create button) and
+            could not be dismissed, so those controls were unreachable. */}
+        {BACKENDLESS_TABS.has(activeTab) && !noticeDismissed && (
+          <div className="flex shrink-0 items-center gap-3 border-b border-[rgba(245,158,11,0.3)] bg-[#1a1206] px-4 py-2">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rec" />
-            <p className="font-slate text-[10px] uppercase tracking-[0.14em] text-white/70">
+            <p className="min-w-0 flex-1 font-slate text-[10px] uppercase tracking-[0.14em] text-white/70">
               This studio&apos;s models aren&apos;t enabled on your key yet — renders will fail.
               <span className="text-primary"> Workspace, Image, Video, Cinema &amp; Camera Path are fully live.</span>
             </p>
+            <button
+              type="button"
+              onClick={() => setNoticeDismissed(true)}
+              aria-label="Dismiss notice"
+              className="shrink-0 rounded border border-white/15 px-2 py-0.5 text-[11px] leading-none text-white/50 transition-colors hover:border-white/35 hover:text-white"
+            >
+              ✕
+            </button>
           </div>
         )}
+        <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className={activeTab === 'workspace' ? "h-full w-full" : "hidden"}>
           <WorkspaceStudio apiKey={apiKey} />
         </div>
@@ -1118,6 +1131,7 @@ export default function StandaloneShell() {
             onGenerationComplete={makeSuccessCallback('ai-influencer')}
             onGenerationError={makeErrorCallback('ai-influencer')}
           />
+        </div>
         </div>
       </div>
       {BOARD_TABS.has(activeTab) && <TaskBoard apiKey={apiKey} />}

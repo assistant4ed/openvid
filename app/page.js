@@ -202,6 +202,9 @@ export default function Home() {
             <a href="#how-it-works" className="slate-label transition-colors hover:text-white">
               How it works
             </a>
+            <Link href="/community" className="slate-label transition-colors hover:text-white">
+              Community
+            </Link>
             <a href="#models" className="slate-label transition-colors hover:text-white">
               Models
             </a>
