@@ -98,3 +98,33 @@ export async function GET(request) {
 
     return NextResponse.json({ jobs, totals });
 }
+
+// Operator cleanup: remove jobs by id, or clear a whole status class. QA and
+// smoke tests leave failed rows behind that otherwise sit in a user's board
+// forever with no way to remove them.
+export async function DELETE(request) {
+    if (!authorized(request)) return NextResponse.json({ error: 'Admin token required' }, { status: 401 });
+    const pool = getPool();
+    if (!pool) return NextResponse.json({ error: 'Accounts are not enabled on this deployment' }, { status: 503 });
+    await ensureSchema();
+
+    const body = await request.json().catch(() => ({}));
+    const ids = Array.isArray(body.ids) ? body.ids.filter((id) => typeof id === 'string') : [];
+    const promptEquals = typeof body.promptEquals === 'string' ? body.promptEquals : null;
+
+    if (ids.length > 0) {
+        const result = await pool.query('DELETE FROM render_jobs WHERE id = ANY($1) RETURNING id', [ids]);
+        return NextResponse.json({ deleted: result.rowCount });
+    }
+    // Narrow, deliberate sweep: failed jobs whose prompt is exactly this
+    // string (how throwaway test rows are identified).
+    if (promptEquals) {
+        const result = await pool.query(
+            `DELETE FROM render_jobs WHERE status = 'failed'
+             AND spec_json::jsonb ->> 'prompt' = $1 RETURNING id`,
+            [promptEquals],
+        );
+        return NextResponse.json({ deleted: result.rowCount });
+    }
+    return NextResponse.json({ error: 'Pass ids[] or promptEquals' }, { status: 400 });
+}
