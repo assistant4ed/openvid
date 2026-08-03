@@ -171,8 +171,17 @@ export async function GET(request) {
         // Live list drives the picker. Video ids are recognised by family so a
         // brand-new model the gateway starts serving still reaches users
         // (with conservative defaults) instead of waiting on a deploy.
+        // Auto-discovery must not duplicate a model we already describe under
+        // its other spelling — the live list still advertises retired Veo ids,
+        // which showed up beside our entry as a second, unusable "veo 3 1".
+        const canonical = (id) => String(id).toLowerCase()
+            .replace(/^models\//, '')
+            .replace(/-(generate|preview|generate-preview)$/g, '')
+            .replace(/[^a-z0-9]/g, '');
+        const knownKeys = new Set(VIDEO_CANDIDATES.map((model) => canonical(model.id)));
         candidates = [...live]
             .filter((id) => VIDEO_ID_PATTERN.test(id))
+            .filter((id) => knownById.has(id) || !knownKeys.has(canonical(id)))
             .map((id) => knownById.get(id) || {
                 id,
                 name: id.replace(/^models\//, '').replace(/[-_]/g, ' '),
