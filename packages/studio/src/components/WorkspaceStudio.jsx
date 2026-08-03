@@ -128,7 +128,7 @@ function readCaps() {
   }
 }
 
-export default function WorkspaceStudio({ apiKey }) {
+export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }) {
   const [modeId, setModeId] = useState("t2v");
   const [openPopover, setOpenPopover] = useState(null); // 'mode'|'start'|'ref'|'ref2'|'model'|'duration'|'aspect'|'camera'
   const [prompt, setPrompt] = useState("");
@@ -153,7 +153,19 @@ export default function WorkspaceStudio({ apiKey }) {
   // disagreement surfaces before the money does.
   const [advanced, setAdvanced] = useState(false);
   const [restoredFrom, setRestoredFrom] = useState(null);
+  // A dropped file has no meaning until the user says what it is — first
+  // frame, last frame or a reference — so hold it here until they choose.
+  const [pendingDrop, setPendingDrop] = useState(null); // { dataUrl, name }
   const composerRef = useRef(null);
+
+  useEffect(() => {
+    const image = (droppedFiles || []).find((file) => file.type?.startsWith("image/"));
+    if (!image) return;
+    const reader = new FileReader();
+    reader.onload = () => setPendingDrop({ dataUrl: String(reader.result), name: image.name });
+    reader.readAsDataURL(image);
+    onFilesHandled?.();
+  }, [droppedFiles, onFilesHandled]);
 
   const mode = MODES.find((entry) => entry.id === modeId) || MODES[0];
   const isVideo = mode.group === "Video";
@@ -832,31 +844,19 @@ export default function WorkspaceStudio({ apiKey }) {
                   a planning pass: the agent asks what it needs to know and
                   writes a beat-by-beat storyline you approve, all before a
                   cent is spent. */}
+
+              {/* Always offered: the planning pass is free and it is what
+                  stops a misunderstood brief becoming a paid render. It used
+                  to hide behind a Standard/Advanced toggle that looked inert. */}
               <button
                 type="button"
-                onClick={() => {
-                  const next = !advanced;
-                  setAdvanced(next);
-                  window.localStorage.setItem(ADVANCED_KEY, next ? "on" : "off");
-                }}
-                title={advanced
-                  ? "Advanced: plan the shot with the agent before generating"
-                  : "Standard: generate straight from your prompt"}
-                className={promptControlClassName({ active: advanced, compact: true })}
+                disabled={planning || !mode.live}
+                onClick={() => handlePlan("storyline")}
+                title="Have the AI check what you mean — free, before any render"
+                className={promptControlClassName({ compact: true })}
               >
-                {advanced ? "Advanced" : "Standard"}
+                {planning ? "Planning…" : "Plan the shot"}
               </button>
-
-              {advanced && (
-                <button
-                  type="button"
-                  disabled={planning || !mode.live}
-                  onClick={() => handlePlan("storyline")}
-                  className={promptControlClassName({ compact: true })}
-                >
-                  {planning ? "Planning…" : "Plan the shot"}
-                </button>
-              )}
 
               <PromptAction disabled={!mode.live} onClick={handleCreate}>
                 {isVideo ? `Generate · ${duration}s` : "Generate"}
@@ -870,6 +870,51 @@ export default function WorkspaceStudio({ apiKey }) {
           see utils/taskStore.js. A render started here stays visible from
           Images or Cinema instead of disappearing with the tab. */}
 
+
+      {pendingDrop && (
+        <div
+          className="fixed inset-0 z-[125] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setPendingDrop(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose what this file is"
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-white/12 bg-[#0b0b0d] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
+              <img src={pendingDrop.dataUrl} alt="" className="h-11 w-11 rounded-lg border border-white/10 object-cover" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white/85">{pendingDrop.name}</p>
+                <p className="font-slate text-[10px] uppercase tracking-wider text-white/35">What is this for?</p>
+              </div>
+              <button type="button" onClick={() => setPendingDrop(null)} aria-label="Cancel"
+                className="rounded-lg border border-white/10 px-2 py-1 text-xs text-white/50 hover:border-white/30 hover:text-white">
+                ✕
+              </button>
+            </div>
+            <div className="p-2">
+              {(isVideo ? ["start", "end", "ref"] : ["ref", "ref2"]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    sourceSetters[key]?.(pendingDrop.dataUrl);
+                    setAdded((previous) => (previous.includes(key) ? previous : [...previous, key]));
+                    setPendingDrop(null);
+                    notifyInfo(`Added as ${sourceChipLabel(key)}.`);
+                  }}
+                  className="flex w-full flex-col items-start gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[#d4f939]/10"
+                >
+                  <span className="text-xs font-semibold text-white/85">{sourceChipLabel(key)}</span>
+                  <span className="text-[10px] leading-relaxed text-white/40">{SOURCE_DEFS[key]?.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {plan && (
         <div

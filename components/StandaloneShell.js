@@ -1064,7 +1064,7 @@ export default function StandaloneShell() {
         )}
         <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className={activeTab === 'workspace' ? "h-full w-full" : "hidden"}>
-          <WorkspaceStudio apiKey={apiKey} />
+          <WorkspaceStudio apiKey={apiKey} droppedFiles={droppedFiles} onFilesHandled={handleFilesHandled} />
         </div>
         <div className={activeTab === 'image' ? "h-full w-full" : "hidden"}>
           <ImageStudio apiKey={apiKey} droppedFiles={droppedFiles} onFilesHandled={handleFilesHandled} onGenerationStart={makeGenerationStartCallback('image')} onGenerationEnd={makeGenerationEndCallback('image')} onGenerationComplete={makeSuccessCallback('image')} onGenerationError={makeErrorCallback('image')} />
