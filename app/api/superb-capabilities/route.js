@@ -119,7 +119,7 @@ async function degradedModels() {
         // Two classes of failure. A "not found / not enabled" answer is
         // PERMANENT — the model is gone, so one is proof. "Temporarily
         // unavailable" may be a blip, so require a couple before hiding.
-        const permanent = /not found for API version|Unknown model|not an enabled|rejected this request/i;
+        const permanent = /not found for API version|Unknown model|not an enabled|rejected this request|任务异常终止|after \d+ attempts/i;
         const transient = /temporarily unavailable|no available (platform|channel)/i;
         const stats = new Map(); // model -> { transient, permanent, succeeded }
         for (const row of result.rows) {
@@ -208,9 +208,13 @@ export async function GET(request) {
         degradedModels(),
     ]);
 
-    const image = live
+    const image = (live
         ? IMAGE_CANDIDATES.filter((model) => live.has(model.id))
-        : IMAGE_CANDIDATES;
+        : IMAGE_CANDIDATES
+    ).map((model) => (degraded.has(model.id) ? { ...model, degraded: true } : model))
+        // A dead engine must not be offered at all — video already worked this
+        // way, image did not, so a broken engine stayed pickable.
+        .sort((a, b) => Number(Boolean(a.degraded)) - Number(Boolean(b.degraded)));
 
     const video = results
         .filter((entry) => entry.enabled)

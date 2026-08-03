@@ -134,7 +134,7 @@ export async function POST(request) {
             console.error('Superb image error:', response.status, detail);
             const friendly = /pixel data|decode image/i.test(detail)
                 ? 'The reference image could not be decoded upstream — try a smaller JPG.'
-                : 'Image generation failed upstream';
+                : `Image generation failed upstream (${response.status}) — temporarily unavailable`;
             const status = response.status === 401 ? 401 : 502;
             return NextResponse.json({ error: friendly }, { status });
         }
