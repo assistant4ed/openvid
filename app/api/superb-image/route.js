@@ -30,6 +30,31 @@ function isRateLimited(key) {
     return entry.count > RATE_LIMIT_MAX;
 }
 
+// Engines answer in two different shapes: some inline the picture as a data
+// URL, others (Seedream, and anything hosting its output) return a markdown
+// link to a temporary URL. Fetch the linked ones so every engine ends up as
+// the same data URL the callers expect — and so a hosted link that expires
+// in a day is captured now rather than stored and lost.
+async function fetchRemoteImages(content) {
+    if (typeof content !== 'string') return [];
+    const links = content.match(/https?:\/\/[^\s)"']+/g) || [];
+    const out = [];
+    for (const link of links.slice(0, 2)) {
+        try {
+            const response = await fetch(link, { signal: AbortSignal.timeout(60000) });
+            if (!response.ok) continue;
+            const mime = response.headers.get('content-type') || 'image/png';
+            if (!mime.startsWith('image/')) continue;
+            const bytes = Buffer.from(await response.arrayBuffer());
+            if (bytes.length === 0) continue;
+            out.push(`data:${mime};base64,${bytes.toString('base64')}`);
+        } catch {
+            // unreachable link — try the next one
+        }
+    }
+    return out;
+}
+
 function extractDataUrls(content) {
     if (typeof content !== 'string') return [];
     const matches = content.match(/data:image\/[a-zA-Z+]+;base64,[A-Za-z0-9+/=]+/g);
@@ -116,7 +141,11 @@ export async function POST(request) {
 
         const data = await response.json();
         const content = data?.choices?.[0]?.message?.content;
-        const dataUrls = extractDataUrls(content);
+        let dataUrls = extractDataUrls(content);
+        if (dataUrls.length === 0) {
+            // No inline image — the engine may have returned a hosted link.
+            dataUrls = await fetchRemoteImages(content);
+        }
         if (dataUrls.length === 0) {
             console.error('Superb image: no image in response, content head:', String(content).slice(0, 120));
             return NextResponse.json({ error: 'The model returned no image' }, { status: 502 });
