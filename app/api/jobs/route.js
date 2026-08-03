@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { userIdFromRequest } from '../../../lib/accounts';
+import { validateVideoSpec } from '../../../lib/videoModels';
 import { createJob, ensureTicker, listJobs } from '../../../lib/renderJobs';
 
 // Server-side render jobs: the browser posts a spec and can vanish — the
@@ -55,6 +56,15 @@ export async function POST(request) {
         end_image_url: hostedUrl(body.end_image_url),
         ref_urls: Array.isArray(body.ref_urls) ? body.ref_urls.map(hostedUrl).filter(Boolean).slice(0, 2) : [],
     };
+
+    // Refuse a shape the model cannot render BEFORE creating a job. Without
+    // this the request became a job row that queued, submitted, failed, and
+    // left the user staring at a red card for something we already knew was
+    // impossible.
+    if (kind === 'video') {
+        const problem = validateVideoSpec({ model: spec.model, duration: spec.duration });
+        if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+    }
 
     try {
         const jobId = await createJob({ apiKey, userId: userIdFromRequest(request), spec, kind });
