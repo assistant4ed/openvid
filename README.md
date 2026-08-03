@@ -627,3 +627,15 @@ Built with [Muapi.ai](https://muapi.ai?utm_source=github&utm_medium=readme&utm_c
 
 ---
 *Looking for a free, open-source AI Video Platform? Open Generative AI is an open-source AI image and video generation studio — with no content filters that you can self-host, customize, and extend.*
+
+## Deploying
+
+Deploys are triggered by **pushing to `main`** — Railway builds from the
+GitHub repo, so what is running is always what is committed. Do not deploy
+from a working directory (`railway up`): it uploads local files and lets
+production drift from git.
+
+    git push origin main      # builds and deploys automatically
+
+The build needs the three public submodules, so a fresh checkout must run
+`git submodule update --init --recursive` before `npm run build:packages`.
