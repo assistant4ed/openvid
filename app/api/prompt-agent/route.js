@@ -120,9 +120,13 @@ follows, how the camera travels and at what speed, and how the shot resolves —
 so the whole duration is directed, not a single frozen idea. If the request
 asks for music or a spoken voiceover, state it plainly as part of the scene's
 audio.
-If an END FRAME description exists the shot must conclude composed like it.
-Carry any STYLE/SUBJECT REFERENCE looks into the scene. Present tense, single
-continuous shot, no cuts.`,
+EVERY note you are given must appear in the prompt — this is not optional.
+A STYLE/SUBJECT REFERENCE means its subject, wardrobe, colours or art style
+must be visibly present in the shot you describe; naming the reference is not
+enough, write what it looks like. If an END FRAME description exists the shot
+must conclude composed like it. Before finishing, check that each note you
+received is represented; if one is not, rewrite until it is. Present tense,
+single continuous shot, no cuts.`,
 };
 
 const CLARIFY_TEMPLATE = `Planning pass — NOTHING is generated from this yet.
@@ -366,15 +370,16 @@ export async function POST(request) {
     // One image per vision call — the vision model handles a single photo in
     // ~20s but blows past every timeout when several are attached. Describes
     // run in parallel; the text agent composes the final prompt from them.
-    async function describeImage(entry) {
+    async function describeImage(entry, attempt = 0) {
         try {
-            const text = await callUpstream(VISION_MODEL, DESCRIBE_SYSTEM, [
+            const text = await callUpstream(attempt < 2 ? VISION_MODEL : VISION_FALLBACK_MODEL, DESCRIBE_SYSTEM, [
                 { type: 'text', text: IMAGE_ROLE_LABELS[entry.role] },
                 { type: 'image_url', image_url: { url: entry.data } },
             ]);
-            return text ? { role: entry.role, text: String(text).slice(0, 600) } : null;
+            if (text) return { role: entry.role, text: String(text).slice(0, 600) };
+            return attempt < 2 ? describeImage(entry, attempt + 1) : null;
         } catch {
-            return null;
+            return attempt < 2 ? describeImage(entry, attempt + 1) : null;
         }
     }
 
