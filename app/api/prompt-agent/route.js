@@ -12,7 +12,14 @@ const DEFAULT_BASE_URL = 'https://www.superbapi.com/v1';
 // models/gemini-* chat id now 400s. deepseek-v4-flash and grok-4 route
 // through other providers and survive; grok-4 is the one with vision.
 const AGENT_MODEL = process.env.SUPERBAPI_PROMPT_MODEL || 'deepseek-v4-flash';
-const VISION_MODEL = process.env.SUPERBAPI_PROMPT_VISION_MODEL || 'grok-4';
+// Vision is what carries the user's reference into models that never see
+// pixels, so it must be fast AND reliable: grok-4 took ~15s per image, leaked
+// its thinking into the output, and timed out often enough that references
+// were silently ignored. gemini-2.5-flash-lite answers the same request in
+// ~6s with clean text (measured 2026-08-03, after the gateway chain was
+// repaired). Overridable via SUPERBAPI_PROMPT_VISION_MODEL.
+const VISION_MODEL = process.env.SUPERBAPI_PROMPT_VISION_MODEL || 'models/gemini-2.5-flash-lite';
+const VISION_FALLBACK_MODEL = 'grok-4';
 // grok-4 (the vision fallback) can take 30s+ on multimodal input; the client
 // waits up to 60s, so stay just under that.
 const TIMEOUT_MS = 55000;
@@ -345,6 +352,17 @@ export async function POST(request) {
         return parseAgentReply(await callUpstream(model, systemText, userContent));
     }
 
+    // Losing the reference because one call blipped is the worst failure this
+    // route has: the render proceeds and quietly ignores the user's image.
+    // Retry, then try the other vision model, before giving up on the pixels.
+    async function callVision(systemText, userContent) {
+        for (const model of [VISION_MODEL, VISION_MODEL, VISION_FALLBACK_MODEL]) {
+            const parsed = await callAgent(model, systemText, userContent).catch(() => null);
+            if (parsed) return parsed;
+        }
+        return null;
+    }
+
     // One image per vision call — the vision model handles a single photo in
     // ~20s but blows past every timeout when several are attached. Describes
     // run in parallel; the text agent composes the final prompt from them.
@@ -379,7 +397,7 @@ export async function POST(request) {
             if (parsed) visionUsed = visionImages.length > 0;
         } else if (mode === 'i2v-vision' && visionImages.length === 1) {
             // Single frame: one vision call does see-and-write in one pass.
-            parsed = await callAgent(VISION_MODEL, system, [
+            parsed = await callVision(system, [
                 { type: 'text', text: userPrompt },
                 { type: 'text', text: IMAGE_ROLE_LABELS[visionImages[0].role] },
                 { type: 'image_url', image_url: { url: visionImages[0].data } },
