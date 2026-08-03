@@ -94,7 +94,9 @@ export async function POST(request) {
               .slice(0, MAX_REFERENCE_IMAGES)
         : [];
 
-    const model = process.env.SUPERBAPI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL;
+    // The caller picks the engine; the env var is only the fallback default.
+    const requested = typeof body?.model === 'string' ? body.model.slice(0, 80) : '';
+    const model = requested || process.env.SUPERBAPI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL;
 
     try {
         const response = await callGateway({ apiKey, model, prompt, images });

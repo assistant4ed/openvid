@@ -353,6 +353,7 @@ export async function submitImageJob(params) {
             kind: 'image',
             prompt: params.prompt,
             ref_urls: hosted,
+            ...(params.imageModel ? { model: params.imageModel } : {}),
         }),
     });
     if (!submit.ok) {

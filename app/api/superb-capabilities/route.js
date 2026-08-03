@@ -38,7 +38,11 @@ const VIDEO_ID_PATTERN = /(kling|seedance|vidu|pixverse|veo|grok-video|grok-[\d.
 // validates against exactly what this route advertises.
 
 const IMAGE_CANDIDATES = [
-    { id: 'gemini-3.1-flash-image-preview-c', name: 'Gemini 3.1 Flash Image' },
+    { id: 'models/nano-banana-pro-preview', name: 'Nano Banana Pro', hint: 'Best at reference editing, people and product shots' },
+    { id: 'doubao-seedream-5-0-260128', name: 'Seedream 5.0', hint: 'Cinematic source images and realistic editing' },
+    { id: 'doubao-seedream-5-0-pro-260628', name: 'Seedream 5.0 Pro', hint: 'The higher-fidelity Seedream tier' },
+    { id: 'gemini-3.1-flash-image-preview-c', name: 'Gemini 3.1 Flash Image', hint: 'Fast and cheap; the long-standing default' },
+    { id: 'gpt-image-2', name: 'ChatGPT Images 2.0', hint: 'Strongest at text, posters and precise layout' },
 ];
 
 const cache = (globalThis.__openvidCaps ??= new Map()); // key -> { at, payload }
@@ -190,6 +194,10 @@ export async function GET(request) {
         degradedModels(),
     ]);
 
+    const image = live
+        ? IMAGE_CANDIDATES.filter((model) => live.has(model.id))
+        : IMAGE_CANDIDATES;
+
     const video = results
         .filter((entry) => entry.enabled)
         .map((entry) => ({
@@ -203,7 +211,7 @@ export async function GET(request) {
             || (Number(Boolean(a.degraded)) - Number(Boolean(b.degraded))));
     const payload = {
         video,
-        image: IMAGE_CANDIDATES,
+        image,
         checkedAt: new Date().toISOString(),
         probed: VIDEO_CANDIDATES.length,
     };

@@ -143,6 +143,7 @@ export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }
   const [plan, setPlan] = useState(null);      // { intent, questions, prompt }
   const [planning, setPlanning] = useState(false);
   const [videoModel, setVideoModel] = useState("");
+  const [imageModel, setImageModel] = useState("");
   const [duration, setDuration] = useState(5);
   const [aspect, setAspect] = useState("16:9");
   const [tasks, setTasks] = useState(getTasks());
@@ -227,6 +228,12 @@ export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  const capsImage = caps?.image || [];
+  const activeImageModel = capsImage.find((entry) => entry.id === imageModel) || capsImage[0] || null;
+  useEffect(() => {
+    if (activeImageModel && imageModel !== activeImageModel.id) setImageModel(activeImageModel.id);
+  }, [activeImageModel, imageModel]);
 
   const capsVideo = caps?.video || [];
   const capsModel = capsVideo.find((entry) => entry.id === videoModel) || capsVideo[0] || null;
@@ -388,6 +395,7 @@ export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }
       const templated = mode.prefix ? `${mode.prefix}${trimmed}` : trimmed;
       submitImage({
         prompt: templated,
+        ...(activeImageModel ? { imageModel: activeImageModel.id } : {}),
         ...(chipRefs.length === 1 ? { image_url: chipRefs[0] } : {}),
         ...(chipRefs.length > 1 ? { images_list: chipRefs } : {}),
       }, meta);
@@ -726,6 +734,35 @@ export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }
                 )}
 
                 {/* Model / duration / aspect (video only) */}
+                {!isVideo && activeImageModel && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenPopover(openPopover === "imageModel" ? null : "imageModel")}
+                      className={promptControlClassName({ active: openPopover === "imageModel", compact: true })}
+                    >
+                      {activeImageModel.name}
+                    </button>
+                    {openPopover === "imageModel" && (
+                      <PromptPopover className="!min-w-[290px]">
+                        <PromptPopoverHeader>Image engine · verified on your key</PromptPopoverHeader>
+                        <PromptMenuList>
+                          {capsImage.map((entry) => (
+                            <PromptMenuItem
+                              key={entry.id}
+                              selected={entry.id === activeImageModel.id}
+                              description={entry.hint}
+                              onClick={() => { setImageModel(entry.id); setOpenPopover(null); }}
+                            >
+                              {entry.name}
+                            </PromptMenuItem>
+                          ))}
+                        </PromptMenuList>
+                      </PromptPopover>
+                    )}
+                  </div>
+                )}
+
                 {isVideo && (
                   <>
                     <div className="relative">
