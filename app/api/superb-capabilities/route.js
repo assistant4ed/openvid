@@ -116,21 +116,26 @@ async function degradedModels() {
               AND status IN ('done', 'failed')
             ORDER BY created_at DESC LIMIT 400
         `);
-        const stats = new Map(); // model -> { failures, succeeded }
+        // Two classes of failure. A "not found / not enabled" answer is
+        // PERMANENT — the model is gone, so one is proof. "Temporarily
+        // unavailable" may be a blip, so require a couple before hiding.
+        const permanent = /not found for API version|Unknown model|not an enabled|rejected this request/i;
+        const transient = /temporarily unavailable|no available (platform|channel)/i;
+        const stats = new Map(); // model -> { transient, permanent, succeeded }
         for (const row of result.rows) {
             let model = null;
             try { model = JSON.parse(row.spec_json).model; } catch { continue; }
             if (!model) continue;
-            const entry = stats.get(model) || { failures: 0, succeeded: false };
+            const entry = stats.get(model) || { transient: 0, permanent: 0, succeeded: false };
             if (row.status === 'done') entry.succeeded = true;
-            else if (/temporarily unavailable|no available (platform|channel)|Unknown model|not an enabled/i.test(row.error || '')) {
-                entry.failures += 1;
-            }
+            else if (permanent.test(row.error || '')) entry.permanent += 1;
+            else if (transient.test(row.error || '')) entry.transient += 1;
             stats.set(model, entry);
         }
         return new Set(
             [...stats.entries()]
-                .filter(([, entry]) => !entry.succeeded && entry.failures >= DEGRADED_MIN_FAILURES)
+                .filter(([, entry]) => !entry.succeeded
+                    && (entry.permanent >= 1 || entry.transient >= DEGRADED_MIN_FAILURES))
                 .map(([model]) => model),
         );
     } catch {
