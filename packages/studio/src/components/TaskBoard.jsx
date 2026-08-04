@@ -9,6 +9,7 @@ import {
   retryTask,
   startPolling,
   subscribe,
+  subscribeOutage,
 } from "../utils/taskStore.js";
 
 // The task board, rendered once for the whole studio instead of once per tab.
@@ -51,7 +52,10 @@ export default function TaskBoard({ apiKey, onReuse = announceReuse }) {
   // Re-render every second so the elapsed clocks on running tasks tick.
   const [, setTick] = useState(0);
 
+  const [outage, setOutage] = useState(null);
+
   useEffect(() => subscribe(setTasks), []);
+  useEffect(() => subscribeOutage(setOutage), []);
 
   useEffect(() => {
     setOpen(window.localStorage.getItem(BOARD_KEY) !== "closed");
@@ -80,6 +84,12 @@ export default function TaskBoard({ apiKey, onReuse = announceReuse }) {
   };
 
   const visible = tasks.filter((task) => filter === "all" || task.type === filter);
+  // One outage produces one red card per attempt. Sweeping them in a single
+  // click beats pressing Delete eighty times.
+  const failedCount = visible.filter((task) => task.status === "failed").length;
+  const clearFailed = () => visible
+    .filter((task) => task.status === "failed")
+    .forEach((task) => removeTask(task.id));
 
   if (!open) {
     return (
@@ -136,6 +146,27 @@ export default function TaskBoard({ apiKey, onReuse = announceReuse }) {
             </button>
           ))}
         </div>
+
+        {outage && (
+          <div className="border-b border-amber-400/20 bg-amber-400/[0.06] px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300/90">
+              Rendering paused
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-amber-100/70">
+              {outage.message}
+            </p>
+          </div>
+        )}
+
+        {failedCount > 1 && (
+          <button
+            type="button"
+            onClick={clearFailed}
+            className="border-b border-white/10 px-3 py-1.5 text-left text-[10px] uppercase tracking-wider text-white/40 hover:text-white/80"
+          >
+            Clear {failedCount} failed
+          </button>
+        )}
 
         <div className="flex-1 space-y-2 overflow-y-auto p-3">
           {visible.length === 0 && (

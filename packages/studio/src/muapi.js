@@ -327,7 +327,11 @@ export async function submitVideoJob(params) {
     });
     if (!submit.ok) {
         const detail = await submit.json().catch(() => ({}));
-        throw new Error(detail?.error || `Job submit failed (${submit.status})`);
+        const error = new Error(detail?.error || `Job submit failed (${submit.status})`);
+        // A service-wide outage is not this render's fault — the caller uses
+        // the code to raise ONE banner instead of another failed card.
+        if (detail?.code) error.code = detail.code;
+        throw error;
     }
     const { jobId } = await submit.json();
     if (params.onJobId) params.onJobId(jobId);
@@ -358,7 +362,11 @@ export async function submitImageJob(params) {
     });
     if (!submit.ok) {
         const detail = await submit.json().catch(() => ({}));
-        throw new Error(detail?.error || `Job submit failed (${submit.status})`);
+        const error = new Error(detail?.error || `Job submit failed (${submit.status})`);
+        // A service-wide outage is not this render's fault — the caller uses
+        // the code to raise ONE banner instead of another failed card.
+        if (detail?.code) error.code = detail.code;
+        throw error;
     }
     const { jobId } = await submit.json();
     if (params.onJobId) params.onJobId(jobId);

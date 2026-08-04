@@ -118,6 +118,19 @@ export function updateTask(id, patch) {
 }
 
 export function removeTask(id) {
+  const task = tasks.find((entry) => entry.id === id);
+  // Local removal alone is cosmetic: hydrate() re-reads the server list and
+  // the card comes straight back on reload. Tell the server too.
+  if (task?.jobId) {
+    const apiKey = typeof window !== "undefined"
+      ? window.localStorage.getItem("superbapi_key") : null;
+    if (apiKey) {
+      fetch(`/api/jobs/${task.jobId}`, {
+        method: "DELETE",
+        headers: { "x-superb-key": apiKey },
+      }).catch(() => { /* cosmetic cleanup — never block the UI */ });
+    }
+  }
   setTasks(tasks.filter((task) => task.id !== id));
 }
 
@@ -193,6 +206,34 @@ function newId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// A gateway-wide outage (the provider's own wallet is empty) fails EVERY
+// render identically. Recording one card per attempt buried the board in
+// eighty copies of the same red text, so an outage is surfaced once, as a
+// banner, and the card that would have carried it is withdrawn.
+const outageListeners = new Set();
+let outage = null;
+
+export function subscribeOutage(listener) {
+  outageListeners.add(listener);
+  listener(outage);
+  return () => outageListeners.delete(listener);
+}
+
+export function setOutage(next) {
+  outage = next;
+  outageListeners.forEach((listener) => listener(outage));
+}
+
+function handleSubmitError(id, error) {
+  if (error?.code === 'provider_out_of_credit') {
+    removeTask(id);
+    setOutage({ code: error.code, message: error.message });
+    return;
+  }
+  setOutage(null);
+  updateTask(id, { status: "failed", error: error?.message?.slice(0, 200) || "Submit failed" });
+}
+
 export async function submitVideo(params, meta = {}) {
   const id = newId("t");
   addTask({
@@ -214,7 +255,7 @@ export async function submitVideo(params, meta = {}) {
       },
     });
   } catch (error) {
-    updateTask(id, { status: "failed", error: error?.message?.slice(0, 200) || "Submit failed" });
+    handleSubmitError(id, error);
   }
   return id;
 }
@@ -239,7 +280,7 @@ export async function submitImage(params, meta = {}) {
       },
     });
   } catch (error) {
-    updateTask(id, { status: "failed", error: error?.message?.slice(0, 200) || "Submit failed" });
+    handleSubmitError(id, error);
   }
   return id;
 }
@@ -253,6 +294,6 @@ export async function retryTask(id) {
     updateTask(id, { jobId });
     startPolling();
   } catch (error) {
-    updateTask(id, { status: "failed", error: error?.message?.slice(0, 200) || "Retry failed" });
+    handleSubmitError(id, error);
   }
 }

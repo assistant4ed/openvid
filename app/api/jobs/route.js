@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { userIdFromRequest } from '../../../lib/accounts';
 import { validateVideoSpec } from '../../../lib/videoModels';
-import { createJob, ensureTicker, listJobs } from '../../../lib/renderJobs';
+import { createJob, ensureTicker, listJobs, providerCreditBlock } from '../../../lib/renderJobs';
 
 // Server-side render jobs: the browser posts a spec and can vanish — the
 // server grounds the prompt, submits upstream, polls, and stores the result.
@@ -64,6 +64,17 @@ export async function POST(request) {
     if (kind === 'video') {
         const problem = validateVideoSpec({ model: spec.model, duration: spec.duration });
         if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+    }
+
+    // Stop before spending the user's time on something we know will fail.
+    const creditBlock = await providerCreditBlock();
+    if (creditBlock) {
+        return NextResponse.json({
+            error: 'Rendering is paused: the upstream provider account has no credit left, '
+                + 'so every render is being refused before it starts. Top that account up and '
+                + 'this clears itself — nothing here needs redeploying.',
+            code: 'provider_out_of_credit',
+        }, { status: 503 });
     }
 
     try {
