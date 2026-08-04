@@ -352,11 +352,11 @@ export default function CameraPathOverlay({
   useEffect(() => {
     if (!isOpen) return undefined;
     const handleKeyDown = (event) => {
-      if (event.key === "Escape" && !isBusy) onClose();
+      if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose, isBusy]);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen) return undefined;
@@ -661,8 +661,12 @@ export default function CameraPathOverlay({
           <button
             type="button"
             onClick={onClose}
-            disabled={isBusy}
-            aria-label="Close camera path"
+            // NOT disabled while rendering. The render is a server-side job
+            // that survives this overlay closing (and the tab closing), so
+            // trapping the user here bought nothing and felt like a freeze.
+            // Progress continues in the task board.
+            aria-label={isBusy ? "Close — the render keeps going in the task board" : "Close camera path"}
+            title={isBusy ? "Closing is safe — the render continues in the task board" : "Close"}
             className="ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.03] text-white/40 transition-all hover:border-white/15 hover:bg-white/[0.07] hover:text-white disabled:opacity-30"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

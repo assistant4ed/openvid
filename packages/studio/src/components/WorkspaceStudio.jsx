@@ -424,6 +424,29 @@ export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }
   })();
 
 
+  // Which roles an image can be filed under. Picking the wrong one on drop
+  // used to mean deleting the chip and re-uploading the file; now the image
+  // moves.
+  const IMAGE_ROLES = ["start", "end", "ref", "ref2"];
+
+  const moveSource = (fromKey, toKey) => {
+    const image = sourceValues[fromKey];
+    if (!image) return;
+    sourceSetters[toKey]?.(image);
+    sourceSetters[fromKey]?.(null);
+    // The destination chip has to be ON the bar or the run drops the image
+    // (only chips on the bar are read into the spec).
+    if (!mode.sources.includes(toKey)) {
+      setAdded((previous) => (previous.includes(toKey) ? previous : [...previous, toKey]));
+    }
+    // A chip the user added is theirs to lose once it is empty; a chip the
+    // mode itself requires stays put, waiting to be filled.
+    if (!mode.sources.includes(fromKey)) {
+      setAdded((previous) => previous.filter((entry) => entry !== fromKey));
+    }
+    setOpenPopover(null);
+  };
+
   // Source chip: opens an upload frame; shows the thumbnail once set. Chips
   // the user added themselves carry a ✕ to take them off the bar again.
   const sourceChip = (key) => {
@@ -530,6 +553,26 @@ export default function WorkspaceStudio({ apiKey, droppedFiles, onFilesHandled }
               }}
               onError={notifyError}
             />
+            {value && (
+              <div className="mt-2 border-t border-white/5 pt-2">
+                <p className="mb-1.5 px-1 text-[10px] uppercase tracking-wider text-white/30">
+                  Use this image as
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {IMAGE_ROLES.filter((role) => role !== key).map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => moveSource(key, role)}
+                      title={SOURCE_DEFS[role]?.desc}
+                      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/60 hover:border-[rgba(212,249,57,0.4)] hover:text-white"
+                    >
+                      {SOURCE_DEFS[role]?.chip || role}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </PromptPopover>
         )}
       </div>
