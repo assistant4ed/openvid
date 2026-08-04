@@ -205,9 +205,9 @@ export default function Home() {
             <Link href="/community" className="slate-label transition-colors hover:text-white">
               Community
             </Link>
-            <a href="#models" className="slate-label transition-colors hover:text-white">
+            <Link href="/models" className="slate-label transition-colors hover:text-white">
               Models
-            </a>
+            </Link>
             <a
               href="https://github.com/assistant4ed/openvid"
               target="_blank"
@@ -410,7 +410,7 @@ export default function Home() {
 
         <section id="models" className="letterbox-rule py-24">
           <div className="mx-auto max-w-7xl px-6">
-            <SlateDivider label="THE VAULT — 403 MODELS, ONE BAR" />
+            <SlateDivider label="THE VAULT — 184 MODELS, ONE BAR" />
           </div>
           <div className="marquee" aria-hidden="true">
             {[0, 1].map((copy) => (
@@ -426,11 +426,19 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <p className="mx-auto mt-8 max-w-7xl px-6 text-[13px] text-white/40">
-            Every model behind one prompt bar with adaptive controls — aspect
-            ratios, durations, resolutions and reference slots that reshape to
-            each model&apos;s real capabilities.
-          </p>
+          <div className="mx-auto mt-8 flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-6">
+            <p className="max-w-2xl text-[13px] text-white/40">
+              Every model behind one prompt bar with adaptive controls — aspect
+              ratios, durations, resolutions and reference slots that reshape to
+              each model&apos;s real capabilities.
+            </p>
+            <Link
+              href="/models"
+              className="slate-label whitespace-nowrap rounded-lg border border-[rgba(212,249,57,0.35)] px-4 py-2 text-[#d4f939] transition-colors hover:bg-[rgba(212,249,57,0.08)]"
+            >
+              Compare every price →
+            </Link>
+          </div>
         </section>
 
         {/* ── How it works — three steps, Higgsfield-style ── */}
