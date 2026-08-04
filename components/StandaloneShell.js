@@ -270,6 +270,19 @@ const BACKENDLESS_TABS = new Set([
   'ai-influencer', 'workflows', 'agents', 'apps',
 ]);
 
+// Two different reasons a studio can't render, and telling them apart matters:
+// "not enabled on your key" invites the user to go fix their key, which is
+// wasted effort when the gateway carries no such model at ALL. Verified
+// against the live catalog — 0 of 184 models do face swap or lip sync.
+const NO_SUCH_MODEL_TABS = new Set(['lipsync', 'body-swap']);
+
+function backendlessReason(tab) {
+  if (NO_SUCH_MODEL_TABS.has(tab)) {
+    return 'This gateway carries no face-swap or lip-sync model — nothing to enable, on any key.';
+  }
+  return "This studio's models aren't enabled on your key yet — renders will fail.";
+}
+
 // Tabs that generate things, and therefore share the task board. The board is
 // mounted once by the shell rather than per studio, so a render started in one
 // tab is still visible from every other one. Editors and browsers (workflows,
@@ -1049,7 +1062,7 @@ export default function StandaloneShell() {
           <div className="flex shrink-0 items-center gap-3 border-b border-[rgba(245,158,11,0.3)] bg-[#1a1206] px-4 py-2">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rec" />
             <p className="min-w-0 flex-1 font-slate text-[10px] uppercase tracking-[0.14em] text-white/70">
-              This studio&apos;s models aren&apos;t enabled on your key yet — renders will fail.
+              {backendlessReason(activeTab)}
               <span className="text-primary"> Workspace, Image, Video, Cinema &amp; Camera Path are fully live.</span>
             </p>
             <button
