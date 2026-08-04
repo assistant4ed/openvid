@@ -238,23 +238,28 @@ export default function ModelPricingTable() {
                             </span>
                         )}
                     </header>
-                    <ul className="space-y-2">
+                    <ul className="space-y-3 sm:space-y-2">
                         {chart.rows.map((model) => {
                             const value = priceValue(model);
                             const width = Math.max(2, (value / chart.peak) * 100);
                             return (
-                                <li key={model.id} className="flex items-center gap-3">
-                                    <span className="w-40 shrink-0 truncate text-xs text-white/65 sm:w-52" title={model.name}>
-                                        {model.name}
-                                    </span>
-                                    <span className="relative h-5 flex-1 overflow-hidden rounded bg-white/[0.04]">
+                                // On a phone a fixed label column leaves the bar
+                                // a few pixels wide, which reads as "no data".
+                                // Stack there, put it in one row from sm up.
+                                <li key={model.id} className="sm:flex sm:items-center sm:gap-3">
+                                    <div className="mb-1 flex items-baseline justify-between gap-3 sm:mb-0 sm:contents">
+                                        <span className="truncate text-xs text-white/65 sm:w-52 sm:shrink-0" title={model.name}>
+                                            {model.name}
+                                        </span>
+                                        <span className="shrink-0 font-mono text-xs text-white/80 sm:order-last sm:w-24 sm:text-right">
+                                            ${value.toFixed(2)}
+                                        </span>
+                                    </div>
+                                    <span className="relative block h-5 overflow-hidden rounded bg-white/[0.04] sm:flex-1">
                                         <span
                                             className="absolute inset-y-0 left-0 rounded bg-gradient-to-r from-[#a8c614] to-[#d4f939]"
                                             style={{ width: `${width}%` }}
                                         />
-                                    </span>
-                                    <span className="w-24 shrink-0 text-right font-mono text-xs text-white/80">
-                                        ${value.toFixed(2)}
                                     </span>
                                 </li>
                             );
