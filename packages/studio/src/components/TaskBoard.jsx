@@ -58,9 +58,24 @@ export default function TaskBoard({ apiKey, onReuse = announceReuse }) {
   useEffect(() => subscribeOutage(setOutage), []);
 
   useEffect(() => {
-    setOpen(window.localStorage.getItem(BOARD_KEY) !== "closed");
+    // The board is a side panel on a wide screen and a drawer on a phone, so
+    // the sensible default differs: open beside the canvas, closed on top of
+    // it. A stored preference always wins.
+    const stored = window.localStorage.getItem(BOARD_KEY);
+    setOpen(stored ? stored !== "closed" : window.matchMedia("(min-width: 1024px)").matches);
     hydrate(apiKey).then(startPolling);
   }, [apiKey]);
+
+  // A drawer over the canvas must close on Escape; a docked panel need not.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape" && !window.matchMedia("(min-width: 1024px)").matches) toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const running = tasks.filter((task) => task.status === "rendering").length;
 
@@ -97,7 +112,9 @@ export default function TaskBoard({ apiKey, onReuse = announceReuse }) {
         type="button"
         onClick={toggle}
         title="Unfold task board"
-        className="fixed right-0 top-24 z-40 flex items-center gap-2 rounded-l-lg border border-r-0 border-white/10 bg-black/80 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-white/60 backdrop-blur hover:text-white"
+        // min-h-11 keeps this at a 44px touch target on a phone, where it is
+        // the only way back to the board.
+        className="fixed right-0 top-24 z-40 flex min-h-11 items-center gap-2 rounded-l-lg border border-r-0 border-white/10 bg-black/80 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-white/60 backdrop-blur hover:text-white"
       >
         <span>Tasks</span>
         {running > 0 && (
@@ -111,13 +128,26 @@ export default function TaskBoard({ apiKey, onReuse = announceReuse }) {
 
   return (
     <>
-      <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-white/10 bg-black/40">
+      {/* Below lg the board is a DRAWER over the canvas, not a column beside
+          it: at 375px a fixed 320px panel left the composer an unusable
+          ~110px strip. The backdrop is mobile-only — on desktop the board is
+          docked and the canvas stays live. */}
+      <button
+        type="button"
+        aria-label="Close task board"
+        onClick={toggle}
+        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+      />
+      <aside
+        className="fixed inset-y-0 right-0 z-50 flex w-[88vw] max-w-[380px] flex-col border-l border-white/10 bg-[#08080a] lg:static lg:z-auto lg:w-[320px] lg:shrink-0 lg:bg-black/40 xl:w-[380px]"
+      >
         <header className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
           <button
             type="button"
             onClick={toggle}
             title="Fold task board"
-            className="text-white/40 hover:text-white"
+            aria-label="Fold task board"
+            className="flex h-11 w-8 items-center justify-center text-white/40 hover:text-white lg:h-auto lg:w-auto"
           >
             ›
           </button>
